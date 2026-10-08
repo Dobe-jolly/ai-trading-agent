@@ -84,7 +84,7 @@ def build_runner(s: Settings, mode: str, mb: MetabaseClient, audit: AuditLog):
 
     from .loop import TicketAgent
     from .runner import Runner
-    from .writer import OsTicketWriter, ShadowWriter
+    from agentcore.writer import OsTicketWriter, ShadowWriter
 
     store = build_store(s, mb)
     toolbox = build_toolbox(s, mb)

@@ -13,7 +13,7 @@ from agent.notify import Notifier
 from agent.osticket import ESCALATION_NOTE_MARKER, OsTicket
 from agent.runner import Runner
 from agent.tools import Toolbox
-from agent.writer import OsTicketWriter, ShadowWriter
+from agentcore.writer import OsTicketWriter, ShadowWriter
 from tests.conftest import (ACCOUNT, AGENT_STAFF, ECOCASH_DB, MOBILE, POSTILION_DB, STANDBY_DB, TICKET_DB,
                             ScriptedModel, decision, find, response, tool_block)
 

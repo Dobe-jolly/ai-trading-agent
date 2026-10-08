@@ -31,7 +31,7 @@ from .tools import Toolbox, standard_reply
 from .anomaly.features import attempt_facts
 from .attachments import AttachmentReader, ReadResult
 from .notify import Notifier
-from .writer import TicketWriter
+from agentcore.writer import TicketWriter
 
 log = logging.getLogger(__name__)
 REQUEST_EXPIRED = "request for information expired"

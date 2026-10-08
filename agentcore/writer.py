@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from .osticket import OsTicket, Ticket
+from .osticket import OsTicketBase as OsTicket
+from typing import Any as Ticket
 
 
 class TicketWriter:

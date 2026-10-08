@@ -14,7 +14,7 @@ from agent.osticket import ESCALATION_NOTE_MARKER, OsTicket
 from agent.runner import Runner
 from agent.sms_checks import Databases, SmsChecks
 from agent.tools import Toolbox
-from agent.writer import OsTicketWriter, ShadowWriter
+from agentcore.writer import OsTicketWriter, ShadowWriter
 from tests.conftest import (
     AGENT_STAFF, CUSTOMERS_DB, DISPATCH_DB, SOCKET_DB, STANDBY_DB, TICKET_DB, ScriptedModel, check, decision,
     response, text_block, tool_block,
