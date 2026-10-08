@@ -63,7 +63,6 @@ def gateway(g: dict[str, Any], min_sends: int) -> list[dict[str, Any]]:
     if not g.get("available"):
         return []
     signals = []
-    days = max(1, g.get("baseline_days") or 1)
     total_cur: dict[str, float] = {}
     total_base: dict[str, float] = {}
     for provider, counts in g["current"].items():
