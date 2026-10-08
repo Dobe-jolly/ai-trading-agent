@@ -396,7 +396,8 @@ function demoGet(path) {
     let items = d.decisions.filter(x => (p.mode ? x.mode === p.mode : x.mode !== "audit"));
     const cutoff = Date.now() - Number(p.days || 14) * 864e5;
     items = items.filter(x => new Date(x.created_at).getTime() >= cutoff);
-    if (p.action) items = items.filter(x => x.final_action === p.action);
+    if (p.action === "held") items = items.filter(isHeld);
+    else if (p.action) items = items.filter(x => x.final_action === p.action && !isHeld(x));
     if (p.status) items = items.filter(x => Object.values(x.statuses || {}).includes(p.status));
     if (p.q) items = items.filter(x => String(x.ticket_number).includes(p.q));
     if (p.flag === "guardrail") items = items.filter(x => x.guardrail_changed);
@@ -478,6 +479,12 @@ function ago(iso) {
   return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`;
 }
 const actionPill = a => { const x = ACTIONS[a] || { label: a || "–", cls: "idle" }; return `<span class="pill ${x.cls}"><span class="dot"></span>${esc(x.label)}</span>`; };
+const HELD = { label: "Waiting for approval", short: "Waiting", cls: "warn" };
+/* A reply held in Approvals is not an outcome yet: the posted reply (or the escalation, if rejected) is recorded again. */
+const isHeld = d => Boolean(d && (d.held || (d.executed || []).includes("awaiting approval")));
+const outcomePill = d => d.error ? `<span class="pill crit">Error</span>`
+  : isHeld(d) ? `<span class="pill ${HELD.cls}" title="Held in Approvals; nothing posted yet"><span class="dot"></span>${HELD.label}</span>`
+  : actionPill(d.final_action);
 const statusChip = s => { const [cls, text] = STATUS[s] || ["", s]; return `<span class="chip ${cls}" title="${esc(text)}">${esc(s)}</span>`; };
 const statusChips = map => { const v = Object.values(map || {}); return v.length ? `<span class="chips">${v.map(statusChip).join("")}</span>` : `<span class="faint">–</span>`; };
 const MAIL = { sent: ["ok", "sent"], pending: ["warn", "waiting"], failed: ["crit", "failed"], skipped: ["", "not sent"] };
@@ -679,7 +686,7 @@ function decisionsTable(items, opts = {}) {
   ${items.map(d => `<tr class="click" data-href="#decision-${d.id}">
     <td class="nowrap num">${esc(when(d.created_at))}</td>
     <td>${ticketLink(d.ticket_number, d.ticket_id)}</td>
-    <td>${d.error ? `<span class="pill crit">Error</span>` : actionPill(d.final_action)} ${marks(d)}</td>
+    <td>${outcomePill(d)} ${marks(d)}</td>
     <td>${statusChips(d.statuses)}</td>
     <td class="num">${d.confidence == null ? "–" : Math.round(d.confidence * 100) + "%"}</td>
     ${opts.mode ? `<td>${modeChip(d.mode)}</td>` : ""}
@@ -697,7 +704,7 @@ PAGES.overview = async () => {
   <div class="stack">
     ${S.session && S.session.anomaly && S.session.anomaly.severity !== "ok" ? `<a href="#anomalies" class="panel" style="text-decoration:none;color:inherit;border-left:4px solid ${S.session.anomaly.severity === "incident" ? "var(--crit)" : "var(--warn)"};border-radius:0 8px 8px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap">${sevPill(S.session.anomaly.severity)}<b>${esc(S.session.anomaly.headline)}</b><span class="faint">${esc(ago(S.session.anomaly.created_at))} · see Anomalies</span></a>` : ""}
     <div class="kpis">
-      <div class="kpi"><span class="label">Tickets decided</span><b>${fmtInt(k.decided)}</b><small>${k.other_topics ? fmtInt(k.other_topics) + " found under other topics · " : ""}${fmtInt(k.deferred)} retried later</small></div>
+      <div class="kpi"><span class="label">Tickets decided</span><b>${fmtInt(k.decided)}</b><small>${k.other_topics ? fmtInt(k.other_topics) + " found under other topics · " : ""}${k.held ? fmtInt(k.held) + " waiting for approval · " : ""}${fmtInt(k.deferred)} retried later</small></div>
       <div class="kpi"><span class="label">Replied &amp; closed</span><b>${fmtInt(k.closed)}</b><small>${pct(k.closed, k.decided)} of decisions</small></div>
       <div class="kpi"><span class="label">Asked the owner</span><b>${fmtInt(k.request_info)}</b><small>missing or wrong details</small></div>
       <div class="kpi"><span class="label">Escalated</span><b>${fmtInt(k.escalated)}</b><small>internal note for staff</small></div>
@@ -833,7 +840,7 @@ PAGES.decisions = async () => {
     ${exportHref ? `<a class="btn" href="${esc(exportHref)}">Export CSV</a>` : `<span class="faint" title="Export works on the portal server">Export CSV (on the server)</span>`}</div>
   <form class="filters" id="filters">
     <div class="field"><label for="f-days">Period</label><select id="f-days" data-filter="days">${opt([["1", "Today"], ["7", "7 days"], ["14", "14 days"], ["30", "30 days"], ["90", "90 days"]], f.days)}</select></div>
-    <div class="field"><label for="f-action">Outcome</label><select id="f-action" data-filter="action">${opt([["", "Any"], ...Object.entries(ACTIONS).map(([k, v]) => [k, v.label])], f.action)}</select></div>
+    <div class="field"><label for="f-action">Outcome</label><select id="f-action" data-filter="action">${opt([["", "Any"], ...Object.entries(ACTIONS).map(([k, v]) => [k, v.label]), ["held", HELD.label]], f.action)}</select></div>
     <div class="field"><label for="f-status">Check status</label><select id="f-status" data-filter="status">${opt([["", "Any"], ...Object.keys(STATUS).map(k => [k, k])], f.status)}</select></div>
     <div class="field"><label for="f-mode">Mode</label><select id="f-mode" data-filter="mode">${opt([["", "Live, notes & shadow"], ["live", "Live"], ["notes", "Notes"], ["shadow", "Shadow"], ["audit", "Audit replays"]], f.mode)}</select></div>
     <div class="field"><label for="f-flag">Flag</label><select id="f-flag" data-filter="flag">${opt([["", "Any"], ["guardrail", "Safety stop"], ["fallback", "Rules fallback"], ["error", "Error"]], f.flag)}</select></div>
@@ -876,7 +883,8 @@ PAGES.decision = async () => {
       <a href="#decisions" class="faint">← Decisions</a>
       <h1 style="margin-top:6px">Ticket ${ticketLink(d.ticket_number, d.ticket_id)}</h1>
       <p>${esc(when(d.created_at))} · ${modeChip(d.mode)} · run <span class="mono">${esc(d.run_id)}</span></p></div>
-    <div class="big-state">${d.error ? `<span class="pill crit">Error</span>` : actionPill(d.final_action)}
+    <div class="big-state">${outcomePill(d)}
+      ${isHeld(d) && !d.error ? `<span class="faint">once approved</span> ${actionPill(d.final_action)}` : ""}
       ${d.guardrail_changed ? `<span class="faint">model proposed</span> ${actionPill(d.proposed_action)}` : ""}</div></div>
   <div class="grid-2">
     <div class="stack">
@@ -1192,7 +1200,7 @@ async function paletteSearch(q) {
       const res = await apiGet(`/api/decisions?q=${encodeURIComponent(digits)}&days=365&limit=8`);
       const seen = new Set();
       items = res.items.filter(d => !seen.has(d.ticket_number) && seen.add(d.ticket_number))
-        .map(d => ({ href: `#decision-${d.id}`, label: `Ticket #${d.ticket_number}`, meta: `${(ACTIONS[d.final_action] || {}).short || d.final_action || ""} · ${when(d.created_at)}` })).concat(items);
+        .map(d => ({ href: `#decision-${d.id}`, label: `Ticket #${d.ticket_number}`, meta: `${isHeld(d) ? HELD.short : (ACTIONS[d.final_action] || {}).short || d.final_action || ""} · ${when(d.created_at)}` })).concat(items);
     } catch (_) { /* pages only */ }
   }
   if (!S.palette) return;

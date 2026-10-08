@@ -48,6 +48,14 @@ def local_day(iso: str) -> str:
         return iso[:10]
 
 
+HELD = "awaiting approval"  # in `executed` while a reply waits in the console; the posted reply gets its own row
+HELD_SQL = "COALESCE(d.executed, '') LIKE '%awaiting approval%'"
+
+
+def is_held(row: Any) -> bool:
+    return HELD in _json(row["executed"], [])
+
+
 def summary(row: sqlite3.Row) -> dict[str, Any]:
     keys = row.keys()
     notes = _json(row["guardrail_notes"], [])
@@ -67,6 +75,7 @@ def summary(row: sqlite3.Row) -> dict[str, Any]:
         "guardrail_changed": bool(row["proposed_action"] and row["final_action"]
                                   and row["proposed_action"] != row["final_action"]),
         "executed": _json(row["executed"], []),
+        "held": is_held(row),
         "deferred": bool(row["deferred"]),
         "error": row["error"],
         "review": row["review_verdict"] if "review_verdict" in keys else None,
@@ -114,10 +123,15 @@ def overview(conn: sqlite3.Connection, days: int, stale_minutes: int,
         f"SELECT {SUMMARY_COLUMNS}, d.input_tokens, d.output_tokens FROM decisions d "
         "WHERE d.created_at >= ? AND d.mode != 'audit' ORDER BY d.id DESC", (since,)).fetchall()
     decided = [r for r in rows if not r["error"] and not r["deferred"]]
-    actions = Counter(r["final_action"] for r in decided)
+    # A reply held for approval is not an outcome yet: once approved it is recorded again (and counted then), once
+    # rejected it becomes an escalation. Count it apart, never as replied or asked.
+    held = [r for r in decided if is_held(r)]
+    acted = [r for r in decided if not is_held(r)]
+    actions = Counter(r["final_action"] for r in acted)
     tokens_in = sum(r["input_tokens"] or 0 for r in rows)
     tokens_out = sum(r["output_tokens"] or 0 for r in rows)
-    confidences = [r["confidence"] for r in decided if r["confidence"] is not None and r["category"] != "rules_fallback"]
+    confidences = [r["confidence"] for r in decided if r["confidence"] is not None
+                   and r["category"] not in ("rules_fallback", "approved_reply")]
 
     today = utc_now().astimezone(LOCAL_ZONE).date()
     day_keys = [(today - timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
@@ -125,7 +139,7 @@ def overview(conn: sqlite3.Connection, days: int, stale_minutes: int,
     by_group = {d: {"day": d, **{k: 0 for k in group_keys}} for d in day_keys}
     statuses: Counter = Counter()
     reasons: Counter = Counter()
-    for r in decided:
+    for r in acted:
         day = local_day(r["created_at"])
         if day in by_day and r["final_action"] in ACTIONS:
             by_day[day][r["final_action"]] += 1
@@ -163,6 +177,7 @@ def overview(conn: sqlite3.Connection, days: int, stale_minutes: int,
             "escalated": actions.get("escalate", 0),
             "request_info": actions.get("request_info", 0),
             "no_action": actions.get("no_action", 0),
+            "held": len(held),
             "deferred": sum(1 for r in rows if r["deferred"]),
             "errors": sum(1 for r in rows if r["error"]),
             "guardrail_changed": sum(1 for r in decided if r["proposed_action"] != r["final_action"]),
@@ -191,8 +206,10 @@ def _filters(params: dict[str, str]) -> tuple[str, list[Any]]:
     where = ["d.created_at >= ?"]
     args: list[Any] = [since_iso(int(params.get("days") or 14))]
     if params.get("action") in ACTIONS:
-        where.append("d.final_action = ?")
+        where.append(f"d.final_action = ? AND NOT {HELD_SQL}")
         args.append(params["action"])
+    elif params.get("action") == "held":
+        where.append(HELD_SQL)
     if params.get("mode") in ("shadow", "notes", "live", "audit"):
         where.append("d.mode = ?")
         args.append(params["mode"])
