@@ -1,0 +1,21 @@
+[Unit]
+Description=NMBZ helpdesk agents: one pass over every desk (SMS Alerts, EcoCash, ...)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=nmbzagents
+Group=nmbzagents
+WorkingDirectory=/opt/nmbz-agents
+EnvironmentFile=/etc/nmbz-agents/agents.env
+ExecStart=/opt/nmbz-agents/.venv/bin/python -m nmbz run
+# A pass can include several 180 s Metabase queries per ticket, on every desk.
+TimeoutStartSec=3600
+# Exit 3 = finished but some tickets errored (they are retried next pass).
+SuccessExitStatus=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/nmbz-agents/state /opt/nmbz-agents/reports

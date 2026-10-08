@@ -1,4 +1,6 @@
-# SMS Alerts agent
+# SMS Alerts desk
+
+Part of the NMBZ helpdesk agents service. Installing, settings, commands and the console are in the [README](../README.md); this page covers what the SMS Alerts desk does. Its settings take the prefix `SMS_ALERTS_` when they should differ from the other desks (`SMS_ALERTS_AGENT_MODE=live`).
 
 This agent replaces the Java `sms-agent` service. It handles every open osTicket ticket under the **SMS Alerts** help topics (`SMS Alerts`, `SMS Alerts / Transactional`, `SMS Alerts / Salaries`). It also finds SMS alerts problems filed under the wrong help topic, or none (see [Tickets under other topics](#tickets-under-other-topics)).
 
@@ -66,7 +68,7 @@ One-time PINs, USSD, EcoCash and marketing SMS count as `other`. A verdict below
 
 **What the agent sees.** A ticket from another topic tells the agent which topic it came from and why triage picked it, so it looks for the account and phone in the messages rather than the form. If the full read shows it isn't about SMS alerts after all, the agent records no action and doesn't look again until the ticket changes. Escalation notes on these tickets say which topic the ticket was under. If Claude is unreachable, these tickets wait, since the Java rules only know SMS Alerts tickets.
 
-`python -m agent run --ticket N` works on a ticket under any topic. It runs triage first, so the same rules apply.
+`python -m nmbz --desk sms_alerts run --ticket N` works on a ticket under any topic. It runs triage first, so the same rules apply.
 
 ### Transaction tables by year
 
@@ -74,7 +76,7 @@ Core banking keeps one table per year: `NMBPRODIDC.TRAN2026`, then `TRAN2027`, a
 
 If next year's table doesn't exist yet in the first days of January, that slice is skipped, as long as the other year's table was read. If the naming ever changes, set `TRAN_TABLE_PATTERN`.
 
-## Rules the code enforces (`agent/guardrails.py`)
+## Rules the code enforces (`sms_alerts/guardrails.py`)
 
 | Rule | Effect |
 |---|---|
@@ -111,19 +113,12 @@ Before anything reaches Claude, mobile numbers, account and other long numbers, 
 
 Names in free text are **not** masked. Sending ticket content to the Claude API needs your IT/risk sign-off.
 
-## Install
+## Checking the setup
 
-RHEL, Python 3.9 or newer:
+Install the service as in the [README](../README.md#install), then:
 
 ```bash
-sudo useradd -r -s /sbin/nologin smsagent
-sudo mkdir -p /opt/sms-alerts-agent /etc/sms-alerts-agent
-sudo cp -r . /opt/sms-alerts-agent && cd /opt/sms-alerts-agent
-sudo python3 -m venv .venv && sudo .venv/bin/pip install -r requirements.txt
-sudo cp .env.example /etc/sms-alerts-agent/agent.env    # fill in; METABASE_* can be copied from sms-agent.env
-sudo chmod 600 /etc/sms-alerts-agent/agent.env
-sudo chown -R smsagent: /opt/sms-alerts-agent/state /opt/sms-alerts-agent/reports /etc/sms-alerts-agent/agent.env
-sudo -u smsagent .venv/bin/python -m agent --env-file /etc/sms-alerts-agent/agent.env check --ping-model
+sudo -u nmbzagents .venv/bin/python -m nmbz --env-file /etc/nmbz-agents/agents.env check --desk sms_alerts --ping-model
 ```
 
 `check` confirms the following:
@@ -167,8 +162,8 @@ If a file the agent needs can't be read, it asks the branch to type the detail i
 Try it on a real ticket before going live. Nothing is decided or written:
 
 ```bash
-python -m agent attachments --ticket 482913           # what the agent would see, numbers masked
-python -m agent attachments --ticket 482913 --local   # text-type files only, nothing sent to the model
+python -m nmbz --desk sms_alerts attachments --ticket 482913           # what the agent would see, numbers masked
+python -m nmbz --desk sms_alerts attachments --ticket 482913 --local   # text-type files only, nothing sent to the model
 ```
 
 ## Cutover from the Java sms-agent
@@ -176,7 +171,7 @@ python -m agent attachments --ticket 482913 --local   # text-type files only, no
 1. **Replay history (no writes).** Run the agent on recently closed tickets and compare with what was actually posted:
 
    ```bash
-   python -m agent --env-file /etc/sms-alerts-agent/agent.env audit --since 2026-09-01 --limit 100
+   python -m nmbz --env-file /etc/nmbz-agents/agents.env --desk sms_alerts audit --since 2026-09-01 --limit 100
    ```
 
    This writes `reports/closed_audit_since_2026-09-01.csv`. Each row shows the statuses, the agent's action and reply, the Java's template reply, and the reply that was actually posted. The agent only sees the thread as it was before the desk responded, and the 15-day window is anchored to each ticket's close date, as in the Java audit. Each ticket costs model calls, so keep `--limit` sensible.
@@ -184,7 +179,7 @@ python -m agent attachments --ticket 482913 --local   # text-type files only, no
 2. **Shadow (no writes).** Install the timer with `AGENT_MODE=shadow` while the Java is still live. After a few days, run:
 
    ```bash
-   python -m agent compare --since <date>
+   python -m nmbz --desk sms_alerts compare --since <date>
    ```
 
    It shows, ticket by ticket, what the agent would have done next to what actually happened. Many tickets will already be closed by the Java before the agent sees them. That's expected, because the audit replay covers those.
@@ -195,12 +190,12 @@ python -m agent attachments --ticket 482913 --local   # text-type files only, no
 
    ```bash
    sudo systemctl disable --now sms-agent.service            # the Java service
-   sudoedit /etc/sms-alerts-agent/agent.env                  # AGENT_MODE=live
-   sudo systemctl start sms-alerts-agent.service             # one pass now; watch the log
-   journalctl -u sms-alerts-agent -n 200 --no-pager
+   sudoedit /etc/nmbz-agents/agents.env                  # SMS_ALERTS_AGENT_MODE=live
+   sudo systemctl start nmbz-agents.service             # one pass now; watch the log
+   journalctl -u nmbz-agents -n 200 --no-pager
    ```
 
-5. **Rollback.** `touch /opt/sms-alerts-agent/state/STOP` (or disable the timer), then `sudo systemctl enable --now sms-agent.service`.
+5. **Rollback.** `touch /opt/nmbz-agents/state/sms_alerts/STOP` (or disable the timer), then `sudo systemctl enable --now sms-agent.service`.
 
 ## Branch notifications
 
@@ -227,8 +222,8 @@ Escalations send no email; staff pick them up from the internal note. The wordin
 Test before going live (sends one sample email, nothing is queued):
 
 ```bash
-python -m agent --env-file /etc/sms-alerts-agent/agent.env notify-test --to you@nmbz.co.zw
-python -m agent --env-file /etc/sms-alerts-agent/agent.env notify-retry     # re-send failed emails now
+python -m nmbz --env-file /etc/nmbz-agents/agents.env --desk sms_alerts notify-test --to you@nmbz.co.zw
+python -m nmbz --env-file /etc/nmbz-agents/agents.env --desk sms_alerts notify-retry     # re-send failed emails now
 ```
 
 `check` warns when the agent is live with notifications switched off.
@@ -259,15 +254,15 @@ A finding reads like "62% of failed sends are NetOne numbers, against 11% of del
 Cost and load: the queries are aggregates over Metabase, and complete days are cached in the agent's own database, so after the first run only the current 24 hours are queried. One model call per hour, only when something is unusual.
 
 ```bash
-python -m agent anomalies --no-model    # run the analysis now and print it, no alerts, no model
-python -m agent anomalies --alert       # run it as the hourly job does, alerting admins if needed
+python -m nmbz --desk sms_alerts anomalies --no-model    # run the analysis now and print it, no alerts, no model
+python -m nmbz --desk sms_alerts anomalies --alert       # run it as the hourly job does, alerting admins if needed
 ```
 
 `check` warns when the watch is on but no admin recipients are set.
 
 ## Portal (audit and monitoring)
 
-`python -m agent portal` serves a console on port 8085. It reads the agent's own decision log, so it needs no Metabase or Claude keys. It has these pages:
+The console (`python -m nmbz portal`, port 8085) shows this desk under **SMS Alerts**. It reads the desk's own decision log, so it needs no Metabase or Claude keys. It has these pages:
 
 - **Overview:** health strip, decisions per day by outcome, and SMS gateway outcomes per day. A rise in "failed" or "never reached gateway" usually means a gateway or CAE incident. It also shows check statuses, why safety rules stepped in, and tokens or cost.
 - **Anomalies:** the latest anomaly-watch report and its history: severity, Claude's summary, signals against their usual level, gateway outcomes per hour, and what failed sends and undelivered accounts have in common.
@@ -288,12 +283,7 @@ The console is still one self-contained page with no external scripts.
 
 `GET /healthz` needs no sign-in. It returns 200, or 503 when no pass has finished within `PORTAL_STALE_MINUTES` (a deliberate pause counts as healthy). Point your monitoring or an F5 health monitor at it.
 
-```bash
-sudo -u smsagent .venv/bin/python -m agent --env-file /etc/sms-alerts-agent/agent.env portal-user add dobe --role admin
-sudo -u smsagent .venv/bin/python -m agent --env-file /etc/sms-alerts-agent/agent.env portal-user add analyst1 --role viewer
-sudo cp deploy/sms-alerts-portal.service /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now sms-alerts-portal
-```
+Users and the console's systemd unit are set up once for every desk: see the [README](../README.md#install).
 
 Security:
 
@@ -346,15 +336,9 @@ Only admins can decide. An edit may move or reword the masked numbers but can't 
 
 A waiting reply keeps the real numbers it needs until then, like the e-mail outbox. They are erased once it is posted, rejected or dropped.
 
-## Deploy (systemd)
+## Running
 
-```bash
-sudo cp deploy/sms-alerts-agent.{service,timer} /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now sms-alerts-agent.timer
-journalctl -u sms-alerts-agent -f
-```
-
-The timer runs a pass every 15 minutes, like the Java service, and systemd never starts a pass while the previous one is still running.
+The service's timer (`nmbz-agents.timer`, see the [README](../README.md#install)) runs a pass of every desk every 15 minutes, like the Java service, and never starts a pass while the previous one is still running.
 
 | Exit code | Meaning |
 |---|---|
@@ -366,44 +350,46 @@ The timer runs a pass every 15 minutes, like the Java service, and systemd never
 ## Day-to-day commands
 
 ```bash
-python -m agent run                                   # one pass in AGENT_MODE
-python -m agent run --ticket 482913 --mode shadow     # one ticket, ignore skip rules, no writes
-python -m agent notify-test --to you@nmbz.co.zw       # one sample branch email
-python -m agent attachments --ticket 482913           # read one ticket's attachments, no decision
-python -m agent anomalies --no-model                  # anomaly analysis now, printed only
-python -m agent check-account --account 1234567890 --phone 0772123456 --types both --trace
+python -m nmbz --desk sms_alerts run                                   # one pass in AGENT_MODE
+python -m nmbz --desk sms_alerts run --ticket 482913 --mode shadow     # one ticket, ignore skip rules, no writes
+python -m nmbz --desk sms_alerts notify-test --to you@nmbz.co.zw       # one sample branch email
+python -m nmbz --desk sms_alerts attachments --ticket 482913           # read one ticket's attachments, no decision
+python -m nmbz --desk sms_alerts anomalies --no-model                  # anomaly analysis now, printed only
+python -m nmbz --desk sms_alerts check-account --account 1234567890 --phone 0772123456 --types both --trace
                                                       # the old single-CIF lookup, no model
-python -m agent report --since 2026-10-01 --out decisions.csv
-python -m agent compare --since 2026-10-01
-touch state/STOP / rm state/STOP                      # kill switch
+python -m nmbz --desk sms_alerts report --since 2026-10-01 --out decisions.csv
+python -m nmbz --desk sms_alerts compare --since 2026-10-01
+touch state/sms_alerts/STOP / rm state/sms_alerts/STOP                      # kill switch
 ```
 
 ## Layout
 
+What every desk shares (the reasoning loop, the pass, osTicket reads and writes, masking, approvals, attachments, the outbox, the anomaly service, the console) is in `agentcore/`, under the same file names; the desk's files below hold what is particular to it.
+
 | Path | What it is |
 |---|---|
-| `agent/normalize.py` | Phone, account, currency and timestamp rules (`SmsAgentService` + `SocketMessageParser`) |
-| `agent/sms_checks.py` | The per-account verdicts and the pipeline trace. The SQL is identical to the Java's. |
-| `agent/delivery.py` | `SocketDeliveryChecker`: gateway reconciliation, dispatch lag, over-send detection |
-| `agent/osticket.py` | Ticket and thread reads; reply, close and note writes with read-back checks |
-| `agent/metabase.py` | Metabase client: `X-API-Key`, resolve by name, read retries, write handling |
-| `agent/tools.py` | The model's tools, with masking; records evidence for the guardrails |
-| `agent/loop.py` | The Claude tool-use loop |
-| `agent/guardrails.py` | Code-enforced rules |
-| `agent/rules.py` | Java-equivalent decisions when Claude is unreachable |
-| `agent/runner.py` | One pass, skip rules, execution, closed-ticket audit, open-ticket snapshot |
-| `agent/triage.py` | Sorting tickets under other topics: about SMS alerts, mixed, or not |
-| `agent/lookups.py` | The read-only investigative lookups |
-| `agent/approval.py` | Which replies wait for a person, and the waiting replies |
-| `agent/attachments.py` | Reading ticket attachments: type detection, local text extraction, image preparation, the model's file reader |
-| `agent/notify.py` | Branch emails and admin alerts: outbox, gateway email/SMS and SMTP transports |
-| `templates/` | Email wording |
-| `agent/anomaly/` | Anomaly watch: `collect.py` (Metabase aggregates and samples), `features.py` (what is compared), `detect.py` (thresholds), `summarize.py` (Claude's summary), `service.py` (reports, admin alerts, ticket briefing) |
-| `prompts/anomaly_prompt.md` | Instructions for the incident summary |
-| `agent/controls.py` | Pause switch and mode hold, shared by the agent and the portal |
-| `agent/portal/` | Portal: `server.py` (HTTP, auth), `data.py` (read models), `users.py`, `static/index.html` (console) |
-| `tools/build_preview.py` | Builds the console with demo data |
-| `prompts/system_prompt.md` | The agent's instructions: status meanings, when to close, ask or escalate, and reply style |
+| `sms_alerts/normalize.py` | Phone, account, currency and timestamp rules (`SmsAgentService` + `SocketMessageParser`) |
+| `sms_alerts/sms_checks.py` | The per-account verdicts and the pipeline trace. The SQL is identical to the Java's. |
+| `sms_alerts/delivery.py` | `SocketDeliveryChecker`: gateway reconciliation, dispatch lag, over-send detection |
+| `sms_alerts/osticket.py` | Ticket and thread reads; reply, close and note writes with read-back checks |
+| `agentcore/metabase.py` | Metabase client: `X-API-Key`, resolve by name, read retries, write handling (shared) |
+| `sms_alerts/tools.py` | The model's tools, with masking; records evidence for the guardrails |
+| `sms_alerts/loop.py` | How the ticket is shown to Claude; the tool-use loop itself is `agentcore/loop.py` |
+| `sms_alerts/guardrails.py` | Code-enforced rules |
+| `sms_alerts/rules.py` | Java-equivalent decisions when Claude is unreachable |
+| `sms_alerts/runner.py` | Which tickets, notes and log columns; the pass itself is `agentcore/runner.py` |
+| `sms_alerts/triage.py` | Sorting tickets under other topics: about SMS alerts, mixed, or not |
+| `sms_alerts/lookups.py` | The read-only investigative lookups |
+| `sms_alerts/approval.py` | Which replies wait for a person, and the waiting replies |
+| `sms_alerts/attachments.py` | Reading ticket attachments: type detection, local text extraction, image preparation, the model's file reader |
+| `sms_alerts/notify.py` | Branch emails and admin alerts: outbox, gateway email/SMS and SMTP transports |
+| `sms_alerts/templates/` | Email wording |
+| `sms_alerts/anomaly/` | Anomaly watch: `collect.py` (Metabase aggregates and samples), `features.py` (what is compared), `detect.py` (thresholds), `summarize.py` (Claude's summary), `service.py` (reports, admin alerts, ticket briefing) |
+| `sms_alerts/prompts/anomaly_prompt.md` | Instructions for the incident summary |
+| `agentcore/controls.py` | Pause switch and mode hold, shared by every desk and the console |
+| `sms_alerts/portal/` | This desk's part of the console: `data.py` (gateway outcome groups), `vocab.py` (status labels and charts); the server and page are in `agentcore/portal/` |
+| `tools/demo_sms_alerts.py` | This desk's demo data for `tools/build_preview.py` |
+| `sms_alerts/prompts/system_prompt.md` | The agent's instructions: status meanings, when to close, ask or escalate, and reply style |
 
 ### Why values are written into the SQL text
 
@@ -412,7 +398,7 @@ Metabase runs a parameterised native query through a `PreparedStatement` with `e
 ## Tests
 
 ```bash
-pip install -r requirements-dev.txt && python -m pytest -q
+pip install -r requirements-dev.txt && python -m pytest -q tests/sms_alerts
 ```
 
 The tests run against a fake Metabase that answers the ported SQL and a scripted model. They cover:

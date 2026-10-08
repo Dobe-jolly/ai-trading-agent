@@ -1,0 +1,23 @@
+[Unit]
+Description=NMBZ helpdesk agents console (every desk: decisions, approvals, anomalies, controls)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nmbzagents
+Group=nmbzagents
+WorkingDirectory=/opt/nmbz-agents
+EnvironmentFile=/etc/nmbz-agents/agents.env
+ExecStart=/opt/nmbz-agents/.venv/bin/python -m nmbz portal
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# The console writes reviews, approvals, the control log, and the pause / mode-hold files.
+ReadWritePaths=/opt/nmbz-agents/state
+
+[Install]
+WantedBy=multi-user.target

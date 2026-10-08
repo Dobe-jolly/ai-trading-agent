@@ -9,9 +9,9 @@ Type=simple
 User=ecomonitor
 Group=ecomonitor
 SupplementaryGroups=systemd-journal
-WorkingDirectory=/opt/ecocash-agent
-EnvironmentFile=/etc/ecocash-agent/monitor.env
-ExecStart=/opt/ecocash-agent/.venv/bin/python -m agent monitor
+WorkingDirectory=/opt/nmbz-agents
+EnvironmentFile=/etc/nmbz-agents/monitor.env
+ExecStart=/opt/nmbz-agents/.venv/bin/python -m nmbz monitor
 Restart=always
 RestartSec=5
 TimeoutStopSec=30
@@ -19,7 +19,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/ecocash-agent/state
+ReadWritePaths=/opt/nmbz-agents/state
 
 [Install]
 WantedBy=multi-user.target

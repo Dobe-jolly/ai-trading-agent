@@ -1,4 +1,6 @@
-# EcoCash agent
+# EcoCash desk
+
+Part of the NMBZ helpdesk agents service. Installing, settings, commands and the console are in the [README](../README.md); this page covers what the EcoCash desk does. Its settings take the prefix `ECOCASH_` when they should differ from the other desks (`ECOCASH_AGENT_MODE=live`).
 
 This agent resolves osTicket tickets about clients who can't link their NMB account to their EcoCash wallet. It works the way the SMS Alerts agent does: Claude reads the whole ticket (form, thread and attachments), looks up what actually happened when the client tried to link, and then replies to the branch with the fix, asks for what's missing, or escalates to ICT with a precise note. Rules in code decide what may be posted.
 
@@ -42,7 +44,7 @@ The codes below come from the registration log of 6 April 2026: 134 requests rea
 | No attempt found | | Nothing in the last 60 days | Ask the branch to confirm the number and account, and have the client try again |
 | Anything else | | No rule yet | Escalate |
 
-The wording is in `agent/ecocash.py` (`ERROR_TYPES`) and `agent/tools.py` (`standard_reply`). Claude adapts it to the thread. The standard wording is shown next to what was posted on each decision in the console.
+The wording is in `ecocash/ecocash.py` (`ERROR_TYPES`) and `ecocash/tools.py` (`standard_reply`). Claude adapts it to the thread. The standard wording is shown next to what was posted on each decision in the console.
 
 ## Tickets
 
@@ -94,7 +96,7 @@ The approval desk (Approvals page) shows the waiting replies, oldest first, with
 
 The real numbers a waiting reply needs are kept only until then, as in the e-mail outbox.
 
-## Rules the code enforces (`agent/guardrails.py`)
+## Rules the code enforces (`ecocash/guardrails.py`)
 
 | Rule | Effect |
 |---|---|
@@ -117,7 +119,7 @@ If Claude can't be reached (`MODEL_FALLBACK=rules`), tickets under an EcoCash to
 
 ## The monitor (replaces ecocash-registration-monitor)
 
-`python -m agent monitor` follows `journalctl -u ecocashreg.service -o json -f` on the integrations host and saves one row per attempt in `ecocash_link_attempts`. What changes from the Java:
+`python -m nmbz monitor` follows `journalctl -u ecocashreg.service -o json -f` on the integrations host and saves one row per attempt in `ecocash_link_attempts`. What changes from the Java:
 
 - **Every attempt is saved.** Successful links and delinks are saved, not just failures. This lets the agent confirm that a retry or delink worked, and the anomaly watch measure a failure rate.
 - **Delinks are recorded.** `ECOCASH_DEREGISTRATION` requests from the branch are now saved.
@@ -135,11 +137,11 @@ Checked against the 6 April log: 134 attempts, 61 linked and 73 failed, matching
 ```bash
 # 1. The table (once). The monitor also creates it if its database user may.
 psql -h 192.168.254.146 -p 5422 -d ecocash_monitor -f sql/ecocash_monitor.sql
-# 2. Install (see "Install" below) and fill /etc/ecocash-agent/monitor.env from deploy/monitor.env.example
+# 2. Install (see "Install" below) and fill /etc/nmbz-agents/monitor.env from deploy/monitor.env.example
 # 3. Optional: load history from a journal export, to check the parser on your data first
 journalctl -u ecocashreg.service --since "2026-10-01" --no-pager > /tmp/ecoreg.txt
-sudo -u ecomonitor .venv/bin/python -m agent --env-file /etc/ecocash-agent/monitor.env monitor --from-file /tmp/ecoreg.txt --dry-run
-sudo -u ecomonitor .venv/bin/python -m agent --env-file /etc/ecocash-agent/monitor.env monitor --from-file /tmp/ecoreg.txt
+sudo -u ecomonitor .venv/bin/python -m nmbz --env-file /etc/nmbz-agents/monitor.env monitor --from-file /tmp/ecoreg.txt --dry-run
+sudo -u ecomonitor .venv/bin/python -m nmbz --env-file /etc/nmbz-agents/monitor.env monitor --from-file /tmp/ecoreg.txt
 shred -u /tmp/ecoreg.txt
 # 4. Swap: stop the Java, start the Python
 sudo systemctl disable --now ecocash-registration-monitor
@@ -165,7 +167,7 @@ Thresholds in code decide the severity. Claude only writes the explanation, from
 Text, CSV, e-mail, Word and Excel files are read on the server. Images and PDFs are read by Claude in a separate call that returns facts only: an error screenshot from the phone, a Universal dashboard error, or an ID copy. For an ID copy it reports only the national ID number, to compare with the ID the bank sent. It never transcribes names, dates of birth or addresses. Skips and limits are the same as the SMS agent's (`ATTACHMENT_*`).
 
 ```bash
-python -m agent attachments --ticket 482913          # what the agent would see, masked
+python -m nmbz --desk ecocash attachments --ticket 482913          # what the agent would see, masked
 ```
 
 ## Privacy
@@ -182,33 +184,20 @@ Sending ticket content to the Claude API needs your IT/risk sign-off, as for the
 
 RHEL, Python 3.9 or newer. The same code goes on both hosts.
 
-**Agent host** (it can be the SMS agent's server):
-
-```bash
-sudo useradd --system --home /opt/ecocash-agent ecoagent
-sudo mkdir -p /opt/ecocash-agent /etc/ecocash-agent && sudo cp -r . /opt/ecocash-agent && sudo chown -R ecoagent: /opt/ecocash-agent
-cd /opt/ecocash-agent && sudo -u ecoagent python3 -m venv .venv && sudo -u ecoagent .venv/bin/pip install -r requirements.txt
-sudo cp .env.example /etc/ecocash-agent/agent.env && sudo chmod 640 /etc/ecocash-agent/agent.env   # then fill it in
-sudo -u ecoagent .venv/bin/python -m agent --env-file /etc/ecocash-agent/agent.env check
-sudo cp deploy/ecocash-agent.{service,timer} deploy/ecocash-agent-portal.service /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now ecocash-agent.timer ecocash-agent-portal
-sudo -u ecoagent .venv/bin/python -m agent --env-file /etc/ecocash-agent/agent.env portal-user add dobe --role admin
-```
+**Service host:** install the service as in the [README](../README.md#install); the EcoCash desk is part of it.
 
 **Integrations host** (the monitor only, with no Claude key):
 
 ```bash
-sudo useradd --system --home /opt/ecocash-agent --groups systemd-journal ecomonitor
-sudo mkdir -p /opt/ecocash-agent/state /etc/ecocash-agent && sudo cp -r . /opt/ecocash-agent && sudo chown -R ecomonitor: /opt/ecocash-agent
-cd /opt/ecocash-agent && sudo -u ecomonitor python3 -m venv .venv && sudo -u ecomonitor .venv/bin/pip install -r requirements.txt
-sudo cp deploy/monitor.env.example /etc/ecocash-agent/monitor.env && sudo chmod 640 /etc/ecocash-agent/monitor.env
+sudo useradd --system --home /opt/nmbz-agents --groups systemd-journal ecomonitor
+sudo mkdir -p /opt/nmbz-agents/state /etc/nmbz-agents && sudo cp -r . /opt/nmbz-agents && sudo chown -R ecomonitor: /opt/nmbz-agents
+cd /opt/nmbz-agents && sudo -u ecomonitor python3 -m venv .venv && sudo -u ecomonitor .venv/bin/pip install -r requirements.txt
+sudo cp deploy/monitor.env.example /etc/nmbz-agents/monitor.env && sudo chmod 640 /etc/nmbz-agents/monitor.env
 ```
 
 If the host can't reach PyPI, build wheels elsewhere with `pip download -r requirements.txt -d wheels` and install with `--no-index --find-links wheels`.
 
-The portal listens on 127.0.0.1:8086 (the SMS agent's is on 8085), so both can run on one server. Publish it through the F5 or nginx with TLS. `GET /healthz` is for monitoring.
-
-The console has the same pages as the SMS agent's, including the approval desk and a live view of the pass in progress (the health strip and the Runs page show the ticket being worked and each lookup, masked).
+The desk shows in the service's console (`python -m nmbz portal`, port 8085) under **EcoCash**, with the same pages as every desk, including the approval desk and a live view of the pass in progress (the health strip and the Runs page show the ticket being worked and each lookup, masked).
 
 **Keyboard:**
 - <kbd>Ctrl</kbd>+<kbd>K</kbd> jumps to any ticket or page.
@@ -219,30 +208,30 @@ The console has the same pages as the SMS agent's, including the approval desk a
 1. Start the Python monitor and let it record for a few days, so the lookups and the anomaly baseline have data.
 2. Run `check`. It should find `OSTICKETS_NEW`, `ecocash_monitor`, Postilion and the standby database, and count the open EcoCash tickets and the last day's attempts.
 3. Create the staff account the agent posts as, and set `REPLY_STAFF_ID`.
-4. Try `lookup` on a client you know, for example `python -m agent lookup --mobile 0771234567`.
-5. Run in shadow for a week (`AGENT_MODE=shadow`) and review the decisions in the console. Then run `audit --since …` to replay closed tickets.
-6. Go live with `AGENT_MODE=live`. `notes` is an intermediate step that posts internal recommendations only.
+4. Try `lookup` on a client you know, for example `python -m nmbz lookup --mobile 0771234567`.
+5. Run in shadow for a week (`ECOCASH_AGENT_MODE=shadow`) and review the decisions in the console. Then run `audit --since …` to replay closed tickets.
+6. Go live with `ECOCASH_AGENT_MODE=live`. `notes` is an intermediate step that posts internal recommendations only.
 
 ## Commands
 
 ```bash
-python -m agent check [--ping-model]
-python -m agent run [--mode shadow|notes|live] [--ticket N] [--limit N]
-python -m agent lookup --mobile 0771234567 | --account 86000013101001 | --id-number 63-1234567K12
-python -m agent monitor [--from-file export.txt] [--dry-run]
-python -m agent attachments --ticket N [--local]
-python -m agent anomalies [--alert] [--no-model]
-python -m agent audit --since 2026-09-01
-python -m agent compare --since 2026-10-01
-python -m agent report --since 2026-10-01 --out decisions.csv
-python -m agent notify-test --to you@nmbz.co.zw
-python -m agent portal
-touch state/STOP / rm state/STOP                     # kill switch
+python -m nmbz --desk ecocash check [--ping-model]
+python -m nmbz --desk ecocash run [--mode shadow|notes|live] [--ticket N] [--limit N]
+python -m nmbz lookup --mobile 0771234567 | --account 86000013101001 | --id-number 63-1234567K12
+python -m nmbz monitor [--from-file export.txt] [--dry-run]
+python -m nmbz --desk ecocash attachments --ticket N [--local]
+python -m nmbz --desk ecocash anomalies [--alert] [--no-model]
+python -m nmbz --desk ecocash audit --since 2026-09-01
+python -m nmbz --desk ecocash compare --since 2026-10-01
+python -m nmbz --desk ecocash report --since 2026-10-01 --out decisions.csv
+python -m nmbz --desk ecocash notify-test --to you@nmbz.co.zw
+python -m nmbz portal
+touch state/ecocash/STOP / rm state/ecocash/STOP                     # kill switch
 ```
 
 ## Found in the Java repository
 
-1. **A production password is in source code.** `src/main/resources/application.yml` holds the PostgreSQL user and password as defaults. Change the password, and keep it only in `/etc/ecocash-agent/monitor.env` (mode 640).
+1. **A production password is in source code.** `src/main/resources/application.yml` holds the PostgreSQL user and password as defaults. Change the password, and keep it only in `/etc/nmbz-agents/monitor.env` (mode 640).
 2. **Real customer data is in the repository.** `EcocashJournalParserTest.java` holds a real customer's name, mobile, national ID and account. `ecoreg log.txt`, a production journal export, holds those details for hundreds of customers. Remove both from the repository and its history. This project's tests use invented data only.
 3. **The registration service logs secrets and personal data at INFO.** This is `ecocashreg.service`, not the monitor. It logs the access token and the full request (names, national ID, account, mobile, IMEI, location). The monitor doesn't need the token, IMEI or location, so these can be removed from the logs.
 4. **Branch delinks fail at EcoCash.** The registration service puts the client's mobile number, not the bank account, in EcoCash's account-number field (`bankAccNumber`). EcoCash accepts this for links, but both branch delinks on 6 April were rejected with TC30174 ("AccountNumber parameter is incorrect"). Worth checking with EcoCash what a delink expects, since the agent's advice for 20503 relies on branches being able to delink.
@@ -258,30 +247,32 @@ touch state/STOP / rm state/STOP                     # kill switch
 
 ## Layout
 
+What every desk shares (the reasoning loop, the pass, osTicket reads and writes, masking, approvals, attachments, the outbox, the anomaly service, the console) is in `agentcore/`, under the same file names; the desk's files below hold what is particular to it.
+
 | Path | What it is |
 |---|---|
-| `agent/monitor/` | The journal parser, follower and store that replace the Java monitor |
-| `agent/ecocash.py` | EcoCash codes, meanings and standard wording; the Metabase lookups (attempts, Postilion, core banking) |
-| `agent/osticket.py` | EcoCash ticket discovery, form fields, identifiers, thread, attachments and writes |
-| `agent/tools.py` | The lookups the model can call, with masking; the evidence the guardrails use |
-| `agent/guardrails.py` | Rules in code |
-| `agent/loop.py`, `agent/runner.py` | The Claude tool-use loop and one pass over the open tickets |
-| `agent/rules.py` | Decisions when Claude can't be reached |
-| `agent/anomaly/` | Counts, thresholds, the failed-vs-linked comparison, summaries and admin alerts |
-| `agent/attachments.py` | Reading ticket attachments |
-| `agent/approval.py` | Which replies wait for a person, and the waiting replies |
-| `agent/notify.py` | Outbox: branch e-mails and admin alerts |
-| `agent/portal/` | The console |
-| `sql/ecocash_monitor.sql` | The attempts table |
-| `deploy/` | systemd units and the monitor's env file |
-| `prompts/`, `templates/` | Instructions for the agent and incident summaries; branch e-mails |
-| `tools/build_preview.py` | Builds `preview.html`, the console with invented data |
+| `ecocash/monitor/` | The journal parser, follower and store that replace the Java monitor |
+| `ecocash/ecocash.py` | EcoCash codes, meanings and standard wording; the Metabase lookups (attempts, Postilion, core banking) |
+| `ecocash/osticket.py` | EcoCash ticket discovery, form fields, identifiers, thread, attachments and writes |
+| `ecocash/tools.py` | The lookups the model can call, with masking; the evidence the guardrails use |
+| `ecocash/guardrails.py` | Rules in code |
+| `ecocash/loop.py`, `ecocash/runner.py` | How the ticket is shown to Claude, and which tickets, notes and log columns; the loop and the pass are in `agentcore/` |
+| `ecocash/rules.py` | Decisions when Claude can't be reached |
+| `ecocash/anomaly/` | Counts, thresholds, the failed-vs-linked comparison, summaries and admin alerts |
+| `ecocash/attachments.py` | Reading ticket attachments |
+| `ecocash/approval.py` | Which replies wait for a person, and the waiting replies |
+| `ecocash/notify.py` | Outbox: branch e-mails and admin alerts |
+| `ecocash/portal/` | This desk's part of the console: `data.py` (outcome groups), `vocab.py` (status labels and charts) |
+| `ecocash/sql/ecocash_monitor.sql` | The attempts table |
+| `deploy/ecocash-monitor.service`, `deploy/monitor.env.example` | The monitor's unit and env file |
+| `ecocash/prompts/`, `ecocash/templates/` | Instructions for the agent and incident summaries; branch e-mails |
+| `tools/demo_ecocash.py` | This desk's demo data for `tools/build_preview.py` |
 
 ## Tests
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest -q
+python -m pytest -q tests/ecocash
 ```
 
 The tests run against an in-memory fake of Metabase that answers the agent's SQL, with a scripted model, and use invented data only.
