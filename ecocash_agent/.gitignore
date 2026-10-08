@@ -1,9 +1,0 @@
-.env
-state/*
-!state/.gitkeep
-reports/*
-!reports/.gitkeep
-__pycache__/
-.venv/
-*.csv
-.pytest_cache/

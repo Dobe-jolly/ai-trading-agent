@@ -1,5 +1,12 @@
+.env
+state/*
+!state/.gitkeep
+reports/*
+!reports/.gitkeep
 __pycache__/
 *.pyc
+.venv/
+*.csv
 .pytest_cache/
 *.egg-info/
-.venv/
+preview*.html
