@@ -18,7 +18,7 @@ from agentcore.cli import DeskCli
 from agentcore.metabase import MetabaseClient, MetabaseError
 from . import notify
 from .config import BASE_DIR, Settings
-from .osticket import OsTicket, Ticket
+from .osticket import OsTicket, Ticket, topic_matches
 from .sources import Connect, CoreBanking, InternetBanking, Postilion
 from .tools import Toolbox
 
@@ -106,7 +106,15 @@ class FailedTxnCli(DeskCli):
                     print(f"[ OK ] {name} (id {db})")
             if code == 0:
                 tickets = self.build_store(s, mb).open_tickets()
-                print(f"[ OK ] {len(tickets)} open failed-transaction ticket(s) under {', '.join(s.topics)}")
+                print(f"[ OK ] {len(tickets)} open failed-transaction ticket(s)")
+                by_topic: dict = {}
+                for t in tickets:
+                    by_topic[t.help_topic] = by_topic.get(t.help_topic, 0) + 1
+                for topic, n in sorted(by_topic.items(), key=lambda kv: -kv[1]):
+                    print(f"       {n:4d}  {topic}")
+                quiet = [t for t in s.topics if not any(topic_matches(found, [t]) for found in by_topic)]
+                if quiet:
+                    print(f"[INFO] no open tickets under: {', '.join(quiet)} (check the name if that is unexpected)")
         except MetabaseError as exc:
             print(f"[FAIL] Metabase: {exc}")
             code = 2
