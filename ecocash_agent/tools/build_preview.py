@@ -24,7 +24,7 @@ from agent.anomaly.detect import SEVERITY_RANK, analyse, incident_key  # noqa: E
 from agent.anomaly.features import attempt_features  # noqa: E402
 from agent.anomaly.service import SCHEMA as ANOMALY_SCHEMA, _slim  # noqa: E402
 from agent.anomaly.summarize import admin_text, fallback_summary  # noqa: E402
-from agent.audit import AuditLog  # noqa: E402
+from agentcore.audit import AuditLog  # noqa: E402
 from agent.config import Settings  # noqa: E402
 from agent.normalize import LOCAL_ZONE  # noqa: E402
 from agent.portal import data  # noqa: E402

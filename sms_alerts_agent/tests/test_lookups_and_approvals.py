@@ -10,10 +10,10 @@ import pytest
 from agent.approval import ApprovalStore
 from agent.lookups import Lookups, message_facts, parse_range
 from agent.osticket import ESCALATION_NOTE_MARKER
-from agent.pii import Pseudonymizer
+from agentcore.pii import Pseudonymizer
 from agent.portal import data
 from agent.portal.server import HttpError, Portal
-from agent.portal.users import UserStore
+from agentcore.portal.users import UserStore
 from agent.tools import Evidence
 from tests.conftest import ScriptedModel, check, decision, response, tool_block
 from tests.test_agent_runner import ACCT, CLOSE_REPLY, build, seed

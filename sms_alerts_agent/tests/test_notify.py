@@ -7,10 +7,10 @@ from dataclasses import replace
 import httpx
 import pytest
 
-from agent.audit import AuditLog
+from agentcore.audit import AuditLog
 from agent.notify import GatewayEmail, Notifier, NotifyError, SmtpEmail, render
 from agent.portal.server import HttpError, Portal
-from agent.portal.users import UserStore
+from agentcore.portal.users import UserStore
 from tests.conftest import ScriptedModel, check, decision
 from tests.test_agent_runner import CLOSE_REPLY, build, seed
 

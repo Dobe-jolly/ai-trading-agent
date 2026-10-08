@@ -12,7 +12,7 @@ from typing import Optional
 from .decision import ESCALATE, NO_ACTION, Decision
 from .loop import AgentResult
 from .osticket import Ticket
-from .pii import Pseudonymizer
+from agentcore.pii import Pseudonymizer
 from .tools import Evidence, Toolbox, standard_reply
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from agent.decision import ESCALATE, NO_ACTION, REPLY_AND_CLOSE, REQUEST_INFO, Decision
 from agent.guardrails import apply_guardrails, reply_problems
 from agent.osticket import Ticket, ThreadEntry, TicketState
-from agent.pii import Pseudonymizer
+from agentcore.pii import Pseudonymizer
 from agent.tools import Evidence
 
 FORM = "00012345678901"

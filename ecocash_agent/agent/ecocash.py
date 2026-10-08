@@ -18,8 +18,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from . import sql
-from .metabase import MetabaseClient, MetabaseError
+from agentcore import sql
+from agentcore.metabase import MetabaseClient, MetabaseError
 from .normalize import (
     LOCAL_ZONE,
     account_key,

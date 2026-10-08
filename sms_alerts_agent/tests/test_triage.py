@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from agent.decision import ESCALATE, REPLY_AND_CLOSE, Decision
 from agent.guardrails import apply_guardrails
 from agent.osticket import ESCALATION_NOTE_MARKER, Ticket, ThreadEntry, TicketState, open_tickets_sql
-from agent.pii import Pseudonymizer
+from agentcore.pii import Pseudonymizer
 from agent.tools import Evidence
 from agent.triage import Triage
 from tests.conftest import AGENT_STAFF, ScriptedModel, check, decision, response, tool_block

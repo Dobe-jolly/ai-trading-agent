@@ -17,7 +17,7 @@ from typing import Optional
 
 from .decision import ESCALATE, NO_ACTION, REPLY_ACTIONS, REPLY_AND_CLOSE, REQUEST_INFO, Decision
 from .osticket import Ticket, TicketState
-from .pii import TOKEN_RE, Pseudonymizer
+from agentcore.pii import TOKEN_RE, Pseudonymizer
 from .tools import Evidence
 
 MIN_REPLY_CHARS = 20

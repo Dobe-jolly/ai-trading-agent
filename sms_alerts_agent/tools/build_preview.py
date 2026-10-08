@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from agent.audit import AuditLog  # noqa: E402
+from agentcore.audit import AuditLog  # noqa: E402
 from agent.anomaly.detect import SEVERITY_RANK, analyse, incident_key  # noqa: E402
 from agent.anomaly.features import gateway_features  # noqa: E402
 from agent.anomaly.service import SCHEMA as ANOMALY_SCHEMA, _slim  # noqa: E402

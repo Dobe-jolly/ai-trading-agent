@@ -7,7 +7,7 @@ from dataclasses import replace
 import anthropic
 import httpx
 
-from agent.audit import AuditLog
+from agentcore.audit import AuditLog
 from agent.delivery import SocketDeliveryChecker
 from agent.loop import TicketAgent
 from agent.osticket import ESCALATION_NOTE_MARKER, OsTicket

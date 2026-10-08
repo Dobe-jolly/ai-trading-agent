@@ -13,8 +13,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Iterable, Optional
 
-from . import sql
-from .metabase import MetabaseClient, MetabaseError
+from agentcore import sql
+from agentcore.metabase import MetabaseClient, MetabaseError
 from .normalize import ACCOUNT_RE, ID_RE, MOBILE_RE, account_key, id_key, mobile_key, parse_timestamp, trim_to_none
 
 log = logging.getLogger(__name__)

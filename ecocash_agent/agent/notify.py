@@ -28,7 +28,7 @@ from typing import Any, Optional
 
 import httpx
 
-from .audit import OUTBOX_SCHEMA, AuditLog, now_iso
+from agentcore.audit import OUTBOX_SCHEMA, AuditLog, now_iso
 
 log = logging.getLogger(__name__)
 

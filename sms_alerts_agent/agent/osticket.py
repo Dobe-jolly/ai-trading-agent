@@ -10,8 +10,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Iterable, Optional
 
-from . import sql
-from .metabase import MetabaseClient, MetabaseError
+from agentcore import sql
+from agentcore.metabase import MetabaseClient, MetabaseError
 from .normalize import (
     normalize_account_number,
     parse_timestamp,

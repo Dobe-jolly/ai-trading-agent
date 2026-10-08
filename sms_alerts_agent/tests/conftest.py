@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from agent.config import Settings  # noqa: E402
-from agent.metabase import MetabaseError  # noqa: E402
+from agentcore.metabase import MetabaseError  # noqa: E402
 
 TICKET_DB, STANDBY_DB, CUSTOMERS_DB, SOCKET_DB, DISPATCH_DB = 121, 2, 3, 4, 5
 AGENT_STAFF = 525

@@ -12,11 +12,11 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from agent.audit import AuditLog
-from agent.controls import effective_mode, read_mode_override, set_mode_override
+from agentcore.audit import AuditLog
+from agentcore.controls import effective_mode, read_mode_override, set_mode_override
 from agent.portal import data
 from agent.portal.server import HttpError, Portal, make_handler
-from agent.portal.users import UserStore, verify_password
+from agentcore.portal.users import UserStore, verify_password
 from tests.conftest import ScriptedModel, check, decision
 from tests.test_agent_runner import CLOSE_REPLY, build, seed
 

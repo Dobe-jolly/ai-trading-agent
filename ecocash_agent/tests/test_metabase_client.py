@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from agent.__main__ import main
-from agent.metabase import MetabaseClient, MetabaseError
+from agentcore.metabase import MetabaseClient, MetabaseError
 
 OK = {"status": "completed", "data": {"cols": [{"name": "id"}, {"name": "v"}], "rows": [[1, "a"], [2, "b"]]}}
 

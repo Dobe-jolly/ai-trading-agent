@@ -15,11 +15,11 @@ from agent.anomaly.detect import analyse, incident_key
 from agent.anomaly.features import compare, gateway_features, network_of
 from agent.anomaly.service import AnomalyService
 from agent.anomaly.summarize import fallback_summary, summarise
-from agent.audit import AuditLog
+from agentcore.audit import AuditLog
 from agent.normalize import LOCAL_ZONE
 from agent.notify import GatewaySms, Notifier
 from agent.portal.server import Portal
-from agent.portal.users import UserStore
+from agentcore.portal.users import UserStore
 from tests.conftest import DISPATCH_DB, SOCKET_DB, STANDBY_DB, TICKET_DB, ScriptedModel, check, decision
 from tests.test_agent_runner import build, seed
 from tests.test_notify import RecordingTransport

@@ -5,7 +5,7 @@ import json
 from dataclasses import replace
 from datetime import timedelta
 
-from agent.audit import AuditLog
+from agentcore.audit import AuditLog
 from agent.ecocash import AttemptStore, BankAccounts, LinkRecords
 from agent.loop import TicketAgent
 from agent.normalize import now_local

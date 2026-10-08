@@ -21,8 +21,8 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
-from .. import sql
-from ..metabase import MetabaseClient, MetabaseError
+from agentcore import sql
+from agentcore.metabase import MetabaseClient, MetabaseError
 from ..normalize import LOCAL_ZONE, now_local, parse_timestamp
 from ..osticket import TOPIC_FILTER, TOPIC_JOINS, TOPIC_PATH
 from .features import account_facts, gateway_features

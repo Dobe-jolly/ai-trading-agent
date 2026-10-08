@@ -11,12 +11,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from . import sql
+from agentcore import sql
 from .ecocash import BY_KEY, ESCALATING, AttemptStore, BankAccounts, LinkAttempt, LinkRecords, Lookup
-from .metabase import MetabaseError
+from agentcore.metabase import MetabaseError
 from .normalize import account_key, format_timestamp, id_key, mobile_key, now_local
 from .osticket import Identifiers, Ticket, find_identifiers
-from .pii import Pseudonymizer
+from agentcore.pii import Pseudonymizer
 
 log = logging.getLogger(__name__)
 MAX_RESULT_CHARS = 9000

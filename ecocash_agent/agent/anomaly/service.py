@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from ..audit import AuditLog, now_iso
+from agentcore.audit import AuditLog, now_iso
 from ..notify import Notifier
 from .collect import Collector
 from .detect import SEVERITY_RANK, analyse, incident_key

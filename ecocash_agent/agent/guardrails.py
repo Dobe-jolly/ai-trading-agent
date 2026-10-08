@@ -16,7 +16,7 @@ from .decision import ESCALATE, NO_ACTION, REPLY_ACTIONS, REPLY_AND_CLOSE, REQUE
 from .ecocash import CLOSABLE
 from .normalize import account_key, id_key, mobile_key, parse_timestamp
 from .osticket import Ticket, TicketState
-from .pii import TOKEN_RE, Pseudonymizer
+from agentcore.pii import TOKEN_RE, Pseudonymizer
 from .tools import Evidence
 
 MIN_REPLY_CHARS = 20

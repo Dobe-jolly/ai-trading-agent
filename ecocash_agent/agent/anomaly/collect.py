@@ -17,9 +17,9 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Optional
 
-from .. import sql
+from agentcore import sql
 from ..ecocash import AttemptStore
-from ..metabase import MetabaseClient, MetabaseError
+from agentcore.metabase import MetabaseClient, MetabaseError
 from ..normalize import LOCAL_ZONE, now_local, parse_timestamp
 from ..osticket import TOPIC_JOINS, TOPIC_PATH, topic_condition
 from .features import attempt_features

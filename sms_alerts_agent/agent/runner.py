@@ -11,14 +11,14 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
-from .audit import AuditLog, is_stale
+from agentcore.audit import AuditLog, is_stale
 from .config import Settings
 from .approval import ApprovalStore, approval_reason, standard_action, token_map
 from .decision import ESCALATE, NO_ACTION, REPLY_ACTIONS, REPLY_AND_CLOSE, REQUEST_INFO, Decision
 from .guardrails import GuardrailResult, apply_guardrails, reply_problems
-from .pii import Pseudonymizer
+from agentcore.pii import Pseudonymizer
 from .loop import AgentError, AgentResult, TicketAgent
-from .metabase import MetabaseError
+from agentcore.metabase import MetabaseError
 from .normalize import now_local, parse_timestamp, today_local
 from .rules import rules_decide
 from .osticket import (

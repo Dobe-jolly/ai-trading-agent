@@ -11,7 +11,7 @@ from .attachments import render_attachment
 from .decision import SUBMIT_DECISION_TOOL, Decision
 from .normalize import today_local
 from .osticket import Ticket
-from .pii import Pseudonymizer
+from agentcore.pii import Pseudonymizer
 from .tools import Evidence, Toolbox
 
 log = logging.getLogger(__name__)

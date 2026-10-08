@@ -35,7 +35,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 from xml.etree import ElementTree
 
-from .metabase import MetabaseError
+from agentcore.metabase import MetabaseError
 from .osticket import Attachment, OsTicket, Ticket
 
 log = logging.getLogger(__name__)

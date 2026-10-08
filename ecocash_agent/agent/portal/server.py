@@ -22,14 +22,14 @@ from typing import Any, Optional
 from urllib.parse import parse_qs, urlsplit
 
 from ..approval import ApprovalStore, summary as approval_summary, token_map
-from ..audit import AuditLog
+from agentcore.audit import AuditLog
 from ..config import Settings
 from ..guardrails import reply_problems
-from ..pii import Pseudonymizer
+from agentcore.pii import Pseudonymizer
 from ..notify import OUTBOX_SCHEMA
-from ..controls import effective_mode, kill_switch_on, read_mode_override, set_kill_switch, set_mode_override
+from agentcore.controls import effective_mode, kill_switch_on, read_mode_override, set_kill_switch, set_mode_override
 from . import data
-from .users import UserStore
+from agentcore.portal.users import UserStore
 
 log = logging.getLogger(__name__)
 STATIC = Path(__file__).resolve().parent / "static" / "index.html"

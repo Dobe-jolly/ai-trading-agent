@@ -13,7 +13,7 @@ from agent.normalize import now_local
 from agent.osticket import ESCALATION_NOTE_MARKER
 from agent.portal import data
 from agent.portal.server import HttpError, Portal
-from agent.portal.users import UserStore
+from agentcore.portal.users import UserStore
 from tests.conftest import ACCOUNT, STANDBY_DB, ScriptedModel, decision, find, response, tool_block
 from tests.test_runner import CLOSED_REPLY, DELINK_REPLY, RecordingTransport, build
 

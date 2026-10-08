@@ -17,9 +17,9 @@ import re
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
-from . import sql
+from agentcore import sql
 from .delivery import AlertTrigger, SocketDeliveryChecker, status_from_external
-from .metabase import MetabaseClient, MetabaseError
+from agentcore.metabase import MetabaseClient, MetabaseError
 from .normalize import (
     format_timestamp,
     is_sms_activated,

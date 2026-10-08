@@ -21,7 +21,7 @@ from agent.attachments import (
     xlsx_text,
 )
 from agent.osticket import OsTicket, Ticket
-from agent.pii import Pseudonymizer
+from agentcore.pii import Pseudonymizer
 from tests.conftest import AGENT_STAFF, TICKET_DB, ScriptedModel, check, decision
 from tests.test_agent_runner import CLOSE_REPLY, build, seed
 

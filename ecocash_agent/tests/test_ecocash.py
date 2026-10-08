@@ -11,7 +11,7 @@ from agent.ecocash import CLOSABLE, ESCALATING, AttemptStore, BankAccounts, Link
 from agent.guardrails import apply_guardrails
 from agent.normalize import LOCAL_ZONE, account_key, id_key, international_mobile, mobile_key, network_of, now_local
 from agent.osticket import OsTicket, TicketState, field_value, find_identifiers, tickets_sql
-from agent.pii import Pseudonymizer
+from agentcore.pii import Pseudonymizer
 from agent.tools import Evidence, Toolbox, standard_reply
 from tests.conftest import ACCOUNT, AGENT_STAFF, ECOCASH_DB, MESSAGES, MOBILE, POSTILION_DB, STANDBY_DB, TICKET_DB
 

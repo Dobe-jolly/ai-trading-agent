@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from agent.config import Settings  # noqa: E402
-from agent.metabase import MetabaseError  # noqa: E402
+from agentcore.metabase import MetabaseError  # noqa: E402
 from agent.normalize import LOCAL_ZONE, account_key, id_key, mobile_key, now_local  # noqa: E402
 
 TICKET_DB, ECOCASH_DB, POSTILION_DB, STANDBY_DB = 121, 7, 8, 2

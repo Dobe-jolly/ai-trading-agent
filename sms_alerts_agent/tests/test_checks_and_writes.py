@@ -6,7 +6,7 @@ from datetime import date
 import pytest
 
 from agent.delivery import SocketDeliveryChecker
-from agent.metabase import MetabaseError
+from agentcore.metabase import MetabaseError
 from agent.osticket import ESCALATION_NOTE_MARKER, OsTicket, html_body
 from agent.sms_checks import ESCALATING_STATUSES, Databases, SmsChecks
 from tests.conftest import AGENT_STAFF, CUSTOMERS_DB, DISPATCH_DB, SOCKET_DB, STANDBY_DB, TICKET_DB, FakeMetabase

@@ -9,7 +9,7 @@ from agent.anomaly.collect import Collector
 from agent.anomaly.detect import analyse
 from agent.anomaly.features import attempt_features
 from agent.anomaly.service import AnomalyService
-from agent.audit import AuditLog
+from agentcore.audit import AuditLog
 from agent.ecocash import AttemptStore
 from agent.normalize import now_local
 from tests.conftest import ECOCASH_DB, TICKET_DB, ScriptedModel

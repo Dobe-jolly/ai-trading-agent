@@ -23,7 +23,7 @@ from typing import Any, Optional
 import anthropic
 
 from .osticket import Ticket
-from .pii import TOKEN_RE, Pseudonymizer
+from agentcore.pii import TOKEN_RE, Pseudonymizer
 
 log = logging.getLogger(__name__)
 

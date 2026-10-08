@@ -18,8 +18,8 @@ from pathlib import Path
 from typing import Any, Iterable, Optional, Protocol
 from urllib.parse import quote, unquote, urlparse
 
-from .. import sql
-from ..metabase import MetabaseClient
+from agentcore import sql
+from agentcore.metabase import MetabaseClient
 from .parser import Attempt
 
 log = logging.getLogger(__name__)

@@ -12,9 +12,9 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, Optional
 
-from . import sql
+from agentcore import sql
 from .delivery import DELIVERED, FAILED, NOT_FOUND, PENDING, AlertTrigger, SocketDeliveryChecker
-from .metabase import MetabaseClient, MetabaseError
+from agentcore.metabase import MetabaseClient, MetabaseError
 from .normalize import (
     ALERT_DEBITS,
     ALERT_SALARIES,

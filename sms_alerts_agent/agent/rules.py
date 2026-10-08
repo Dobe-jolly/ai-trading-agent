@@ -14,7 +14,7 @@ from typing import Optional
 from .decision import ESCALATE, REPLY_AND_CLOSE, Decision
 from .loop import AgentResult
 from .osticket import Ticket
-from .pii import Pseudonymizer
+from agentcore.pii import Pseudonymizer
 from .sms_checks import ESCALATING_STATUSES, SmsChecks
 from .tools import Evidence
 

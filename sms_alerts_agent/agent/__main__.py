@@ -25,12 +25,12 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from .audit import AuditLog
+from agentcore.audit import AuditLog
 from .config import BASE_DIR, VALID_MODES, Settings
-from .controls import effective_mode, read_mode_override
+from agentcore.controls import effective_mode, read_mode_override
 from .decision import ESCALATE, REPLY_AND_CLOSE
 from .delivery import SocketDeliveryChecker
-from .metabase import MetabaseClient, MetabaseError
+from agentcore.metabase import MetabaseClient, MetabaseError
 from .notify import Notifier, NotifyError, build_sms_transport, build_transport, render
 from .osticket import OsTicket
 from .sms_checks import TRAN_PATTERN_RE, Databases, SmsChecks
@@ -299,7 +299,7 @@ def cmd_attachments(s: Settings, args: argparse.Namespace) -> int:
     """Read the attachments on one ticket and print what the agent would see. No decision, no writes."""
     from .attachments import render_attachment
     from .osticket import Ticket
-    from .pii import Pseudonymizer
+    from agentcore.pii import Pseudonymizer
 
     mode = "local" if args.local else s.attachment_mode
     if mode == "off":
@@ -357,7 +357,7 @@ def cmd_portal(s: Settings, args: argparse.Namespace) -> int:
 def cmd_portal_user(s: Settings, args: argparse.Namespace) -> int:
     import getpass
 
-    from .portal.users import UserStore
+    from agentcore.portal.users import UserStore
 
     store = UserStore(s.portal_users_file)
     if args.action == "list":
