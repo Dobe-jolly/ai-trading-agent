@@ -7,28 +7,23 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python < 3.9
-    from backports.zoneinfo import ZoneInfo  # type: ignore
+from agentcore.normalize import (  # noqa: F401 - shared helpers, re-exported for this agent's modules
+    LOCAL_ZONE,
+    NON_DIGITS,
+    digits_only,
+    now_local,
+    parse_timestamp,
+    today_local,
+    trim_to_none,
+    window,
+)
+from agentcore.normalize import format_timestamp as _format_timestamp
 
-LOCAL_ZONE = ZoneInfo("Africa/Johannesburg")  # CAT/SAST, UTC+2 all year, same as Harare
-NON_DIGITS = re.compile(r"\D+")
+
 MOBILE_RE = re.compile(r"(?<![\d+])(?:\+?263|0)?[\s-]?(7[1378])(?:[\s-]?\d){7}(?!\d)")
 ID_RE = re.compile(r"(?<![\w-])(\d{2})[\s-]?(\d{6,7})[\s-]?([A-Za-z])[\s-]?(\d{2})(?![\w])")
 ACCOUNT_RE = re.compile(r"(?<![\d+])\d(?:[\s-]?\d){9,15}(?!\d)")
 NETWORKS = {"71": "NetOne", "73": "Telecel", "77": "Econet", "78": "Econet"}
-
-
-def trim_to_none(value: Any) -> Optional[str]:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
-
-
-def digits_only(value: Any) -> str:
-    return NON_DIGITS.sub("", str(value or ""))
 
 
 def mobile_key(value: Any) -> Optional[str]:
@@ -90,33 +85,6 @@ def to_decimal(value: Any) -> Optional[Decimal]:
         return None
 
 
-def parse_timestamp(value: Any) -> Optional[datetime]:
-    """Metabase and the monitor give local times without a zone, or ISO strings with one."""
-    if value is None or value == "":
-        return None
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=LOCAL_ZONE)
-    text = str(value).strip().replace("Z", "+00:00")
-    for candidate in (text, text.replace(" ", "T")):
-        try:
-            parsed = datetime.fromisoformat(candidate[:32])
-            return parsed if parsed.tzinfo else parsed.replace(tzinfo=LOCAL_ZONE)
-        except ValueError:
-            continue
-    for fmt in ("%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y"):
-        try:
-            return datetime.strptime(text, fmt).replace(tzinfo=LOCAL_ZONE)
-        except ValueError:
-            continue
-    return None
-
-
-def format_timestamp(value: Optional[datetime]) -> str:
-    if value is None:
-        return ""
-    return value.astimezone(LOCAL_ZONE).strftime("%d-%m-%Y %H:%M")
-
-
 def parse_date(value: Any) -> Optional[date]:
     if isinstance(value, date) and not isinstance(value, datetime):
         return value
@@ -124,13 +92,5 @@ def parse_date(value: Any) -> Optional[date]:
     return stamp.date() if stamp else None
 
 
-def today_local() -> date:
-    return datetime.now(LOCAL_ZONE).date()
-
-
-def now_local() -> datetime:
-    return datetime.now(LOCAL_ZONE)
-
-
-def window(end: date, days: int) -> tuple[date, date]:
-    return end - timedelta(days=days), end
+def format_timestamp(value: Optional[datetime]) -> str:
+    return _format_timestamp(value, '')

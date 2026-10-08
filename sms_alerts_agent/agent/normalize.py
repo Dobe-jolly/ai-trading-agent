@@ -12,28 +12,23 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python < 3.9
-    from backports.zoneinfo import ZoneInfo  # type: ignore
+from agentcore.normalize import (  # noqa: F401 - shared helpers, re-exported for this agent's modules
+    LOCAL_ZONE,
+    NON_DIGITS,
+    digits_only,
+    now_local,
+    parse_timestamp,
+    today_local,
+    trim_to_none,
+    window,
+)
+from agentcore.normalize import format_timestamp as _format_timestamp
 
-LOCAL_ZONE = ZoneInfo("Africa/Johannesburg")
-NON_DIGITS = re.compile(r"\D+")
+
 PLACEHOLDER_EMAILS = {"none@nmbz.co.zw", "nmblite@nmbz.co.zw"}
 
 ALERT_SALARIES = "SALARIES"
 ALERT_DEBITS = "DEBITS"
-
-
-def trim_to_none(value: Any) -> Optional[str]:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
-
-
-def digits_only(value: Any) -> str:
-    return NON_DIGITS.sub("", str(value or ""))
 
 
 # ---- SmsAgentService helpers ----------------------------------------------------
@@ -240,36 +235,6 @@ def amounts_match(left: Optional[Decimal], right: Optional[Decimal]) -> bool:
     return left is not None and right is not None and left == right
 
 
-def parse_timestamp(value: Any) -> Optional[datetime]:
-    """Timestamps from Metabase (Oracle/Postgres); naive values are Africa/Johannesburg local time."""
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=LOCAL_ZONE)
-    if isinstance(value, (int, float)):
-        return datetime.fromtimestamp(value / 1000, tz=timezone.utc).astimezone(LOCAL_ZONE)
-    text = str(value).strip()
-    if not text:
-        return None
-    candidate = text.replace("Z", "+00:00")
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", candidate):
-        candidate += "T00:00:00"
-    candidate = re.sub(r"^(\d{4}-\d{2}-\d{2}) ", r"\1T", candidate)
-    # Python 3.9's fromisoformat only accepts 3 or 6 fractional digits.
-    candidate = re.sub(r"\.(\d+)", lambda m: "." + (m.group(1) + "000000")[:6], candidate)
-    try:
-        parsed = datetime.fromisoformat(candidate)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=LOCAL_ZONE)
-
-
-def format_timestamp(value: Optional[datetime]) -> str:
-    if value is None:
-        return "unknown time"
-    return value.astimezone(LOCAL_ZONE).strftime("%d-%m-%Y %H:%M")
-
-
 def parse_date(value: Any) -> Optional[date]:
     """Loose date parse for a transaction date the model passes (YYYY-MM-DD or DD-MM-YYYY or DD/MM/YYYY)."""
     text = trim_to_none(value)
@@ -283,13 +248,5 @@ def parse_date(value: Any) -> Optional[date]:
     return None
 
 
-def today_local() -> date:
-    return datetime.now(LOCAL_ZONE).date()
-
-
-def now_local() -> datetime:
-    return datetime.now(LOCAL_ZONE)
-
-
-def window(end: date, days: int) -> tuple[date, date]:
-    return end - timedelta(days=days), end
+def format_timestamp(value: Optional[datetime]) -> str:
+    return _format_timestamp(value, 'unknown time')
