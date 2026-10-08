@@ -1,0 +1,66 @@
+"""How the console talks about the EcoCash desk: status labels, the overview chart and the anomaly page.
+Served to the page with the desk list, so the page itself has no desk-specific wording."""
+
+VOCAB = {
+    "title": "EcoCash",
+    "agent": "EcoCash agent",
+    "status": {
+        'linked': ['ok', 'Linked successfully'],
+        'already_linked': ['ask', 'Already linked to a wallet (20503): branch must delink first'],
+        'unlinked': ['ask', 'Delinked: client can link again'],
+        'kyc_mismatch': ['warn', 'KYC verification failed (BCS50646): name or ID differs from EcoCash'],
+        'number_not_ecocash': ['warn', 'Number not on EcoCash (TP40288)'],
+        'wallet_closed': ['warn', 'EcoCash wallet closed (TP40050)'],
+        'ecocash_system_error': ['warn', 'EcoCash system error (TP40024): temporary'],
+        'account_rejected': ['crit', 'Account number rejected by EcoCash (TC30174)'],
+        'no_response': ['crit', 'No answer from EcoCash'],
+        'unknown': ['crit', 'Unrecognised EcoCash error'],
+        'none': ['idle', 'No link attempt found'],
+    },
+    "overview_sub": "where its lookups found each client",
+    "chart": {
+        "key": "outcomes_by_day",
+        "title": "Where the clients stood",
+        "desc": "The latest link attempt behind each decision, by who has to act next. A rise in red usually means an EcoCash incident, not the clients.",
+        "label": "Latest attempt outcome per day",
+        "series": [
+            {"key": "linked", "label": "Linked", "fill": "f-delivered"},
+            {"key": "branch", "label": "Branch must act (delink)", "fill": "f-queued"},
+            {"key": "client", "label": "Client must act", "fill": "f-never"},
+            {"key": "ecocash", "label": "EcoCash error or no answer", "fill": "f-failed"},
+            {"key": "ict", "label": "Needs ICT", "fill": "f-unknown"},
+        ],
+        "hops": ["client / branch", "registration service", "EcoCash", "Postilion link record"],
+    },
+    "found_heading": "What the lookups found",
+    "found_sub": "The latest link attempt behind each decision.",
+    "found_col": "Latest attempt",
+    "found_none": "No link attempt was looked up.",
+    "queue_sub": "Every open EcoCash ticket",
+    "queue_empty": "No open EcoCash tickets at the last pass.",
+    "template_label": "Standard wording for this status",
+    "pause_placeholder": "e.g. EcoCash outage INC-2231",
+    "anomaly": {
+        "intro": "Every hour the watch compares the last 24 hours with the usual level, for EcoCash ticket volume and for every link and delink request EcoCash answered, then compares the failed links with the successful ones to find what they have in common.",
+        "signals_sub": "Last 24 hours (and the last 2–3 hours) against the usual level over the previous {baseline_days} days.",
+        "baseline_from": "attempts",
+        "ok_share_label": "Share of successful links",
+        "comparisons": [
+            {"key": "attempts", "ok_key": "linked_n", "title": "What is different about the failed links",
+             "desc": "{failed_n} failed link requests compared with {ok_n} successful ones from the same 24 hours. A detail that is much more common among failures points at the cause.",
+             "empty": "Nothing stands out: failed and successful links look alike.",
+             "errors": "EcoCash errors among the failures"},
+        ],
+        "tickets_title": "EcoCash tickets per day",
+        "hourly": {
+            "source": "attempts", "title": "Link requests, last 48 hours", "desc": "Per hour, as EcoCash answered them (recorded by the monitor).",
+            "label": "Link requests per hour", "empty": "Link attempt data unavailable.",
+            "series": [
+                {"key": "linked", "label": "Linked", "fill": "f-delivered"},
+                {"key": "delink", "label": "Delink requests", "fill": "f-queued"},
+                {"key": "failed", "label": "Failed", "fill": "f-failed"},
+                {"key": "no_response", "label": "No answer", "fill": "f-unknown"},
+            ],
+        },
+    },
+}

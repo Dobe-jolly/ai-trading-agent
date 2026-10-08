@@ -1,4 +1,4 @@
-<title>SMS Alerts Agent Console</title>
+<title>Helpdesk Agents Console</title>
 <!--PORTAL-SERVED-->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -81,6 +81,15 @@ h3 { font-size: .92rem; font-weight: 650; }
 .nav a:hover { background: var(--surface-2); color: var(--ink); }
 .nav a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .nav .count { font-size: .72rem; font-variant-numeric: tabular-nums; background: var(--surface-2); color: var(--ink-2); border-radius: 999px; padding: 0 7px; }
+.desks { display: grid; gap: 4px; padding: 0 2px; }
+.desks a { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink-2); text-decoration: none; font-weight: 600; font-size: .86rem; background: var(--surface); }
+.desks a:hover { border-color: var(--ink-3); color: var(--ink); }
+.desks a[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.desks a .badges { margin-left: auto; display: flex; gap: 4px; }
+.desks a .badge { font-size: .68rem; font-weight: 700; border-radius: 999px; padding: 0 6px; line-height: 1.5; }
+.desks a .badge.ask { background: var(--ask-soft); color: var(--ask); }
+.desks a .badge.warn { background: var(--warn-soft); color: var(--warn); }
+.desks a .badge.crit { background: var(--crit-soft); color: var(--crit); }
 .rail-foot { margin-top: auto; font-size: .75rem; color: var(--ink-3); padding: 0 6px; display: grid; gap: 4px; }
 .main { min-width: 0; padding-inline: 28px; padding-block: 0 48px; }
 
@@ -220,6 +229,8 @@ details.msg pre { margin: 0; padding: 10px 12px; border-top: 1px solid var(--lin
   .app { grid-template-columns: minmax(0, 1fr); }
   .rail { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--line); gap: 10px; }
   .nav { flex-direction: row; overflow-x: auto; width: 100%; gap: 4px; }
+  .desks { grid-auto-flow: column; overflow-x: auto; width: 100%; }
+  .desks a { white-space: nowrap; }
   .nav a { white-space: nowrap; padding: 6px 10px; }
   .rail-foot { display: none; }
   .main { padding-inline: 16px; }
@@ -276,8 +287,9 @@ kbd { font: 600 .68rem var(--font-mono); border: 1px solid currentColor; border-
         <path d="M8 11.5h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-8l-4 3v-3H8a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2z" fill="var(--surface)"/>
         <circle cx="11" cy="16" r="1.3" fill="var(--accent)"/><circle cx="15" cy="16" r="1.3" fill="var(--accent)"/><circle cx="19" cy="16" r="1.3" fill="var(--accent)"/>
       </svg>
-      <div><b>SMS Alerts agent</b><span>Service desk console</span></div>
+      <div><b id="brand-desk">Helpdesk agents</b><span>Service desk console</span></div>
     </div>
+    <nav class="desks" id="desks" aria-label="Desks"></nav>
     <nav class="nav" aria-label="Sections">
       <a href="#overview" data-route="overview">Overview</a>
       <a href="#anomalies" data-route="anomalies">Anomalies <span id="nav-anom"></span></a>
@@ -306,21 +318,28 @@ kbd { font: 600 .68rem var(--font-mono); border: 1px solid currentColor; border-
 const SERVED = !!document.querySelector('meta[name="portal"][content="served"]');
 const DEMO_EL = document.getElementById("demo-data");
 const DEMO = !SERVED && DEMO_EL ? JSON.parse(DEMO_EL.textContent) : null;
-const S = { session: null, route: "overview", id: null, filters: { days: "14", action: "", mode: "", status: "", flag: "", review: "", q: "" }, offset: 0, timer: null };
+/* The desk being shown: ?desk=… in the address, else the last one used, else the first. */
+let DESK = null, V = null;
+const SERVICE_PATH = "/api/service";
+function deskPath(path) {
+  if (path.startsWith(SERVICE_PATH) || !path.startsWith("/api/")) return path;
+  return `/api/d/${encodeURIComponent(DESK)}/` + path.slice(5);
+}
+const S = { service: null, session: null, route: "overview", id: null, filters: { days: "14", action: "", mode: "", status: "", flag: "", review: "", q: "" }, offset: 0, timer: null };
 
 class ApiError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
 
 async function apiGet(path) {
-  if (DEMO) return demoGet(path);
-  if (!SERVED) throw new ApiError(0, "This page has to be opened from the portal on the agent server (python -m agent portal).");
-  const res = await fetch(path, { headers: { Accept: "application/json" }, credentials: "same-origin" });
+  if (DEMO) return path.startsWith(SERVICE_PATH) ? demoService() : demoGet(path);
+  if (!SERVED) throw new ApiError(0, "This page has to be opened from the console on the agent server (python -m nmbz portal).");
+  const res = await fetch(deskPath(path), { headers: { Accept: "application/json" }, credentials: "same-origin" });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, body.error || res.statusText);
   return body;
 }
 async function apiPost(path, payload) {
-  if (DEMO) return demoPost(path, payload);
-  const res = await fetch(path, { method: "POST", credentials: "same-origin",
+  if (DEMO) return path.startsWith(SERVICE_PATH) ? demoServicePost(payload) : demoPost(path, payload);
+  const res = await fetch(deskPath(path), { method: "POST", credentials: "same-origin",
     headers: { "Content-Type": "application/json", "X-Portal-Request": "1", Accept: "application/json" },
     body: JSON.stringify(payload) });
   const body = await res.json().catch(() => ({}));
@@ -329,11 +348,22 @@ async function apiPost(path, payload) {
 }
 
 /* demo mode: answers from the embedded snapshot; edits stay in this browser tab */
+function demoService() {
+  const svc = DEMO.service;
+  return { ...svc, paused: !!DEMO_SVC.paused,
+    desks: svc.desks.map(x => x.key === DESK ? { ...x, ...ds().session, approvals_pending: (ds().session.approvals_pending ?? x.approvals_pending) } : x) };
+}
+const DEMO_SVC = { paused: false };
+function demoServicePost(body) {
+  DEMO_SVC.paused = !!body.pause;
+  ds().events.unshift({ created_at: new Date().toISOString(), actor: DEMO.service.user, action: body.pause ? "pause every desk" : "resume every desk", detail: body.note || "" });
+  return demoService();
+}
 function demoGet(path) {
   const url = new URL(path, "https://demo.local");
   const p = Object.fromEntries(url.searchParams);
-  const d = DEMO;
-  if (url.pathname === "/api/session") return { ...d.session, ...DEMO_STATE.session };
+  const d = DEMO.desks[DESK];
+  if (url.pathname === "/api/session") return { ...d.session, ...ds().session };
   if (url.pathname === "/api/overview") return d.overview;
   if (url.pathname === "/api/queue") return d.queue;
   if (url.pathname === "/api/runs") return d.runs;
@@ -342,23 +372,23 @@ function demoGet(path) {
   if (am) { const rep = (d.anomaly_reports || {})[am[1]]; if (!rep) throw new ApiError(404, "No report with that id."); return { ...d.anomalies, report: rep }; }
   if (url.pathname === "/api/notifications") {
     const items = d.notifications.items.filter(n => !p.status || n.status === p.status);
-    return { ...d.notifications, items, retryable: DEMO_STATE.retried ? 0 : d.notifications.retryable };
+    return { ...d.notifications, items, retryable: ds().retried ? 0 : d.notifications.retryable };
   }
   if (url.pathname === "/api/quality") return d.quality;
   if (url.pathname === "/api/live") return d.live || { running: false };
   if (url.pathname === "/api/approvals") {
     const all = (d.approvals || { pending: [], decided: [] });
-    const decided = Object.values(DEMO_STATE.approvals);
+    const decided = Object.values(ds().approvals);
     return { ...all, can_decide: true, approval_mode: d.session.approval_mode,
-             pending: all.pending.filter(a => !DEMO_STATE.approvals[a.id]), decided: [...decided, ...all.decided] };
+             pending: all.pending.filter(a => !ds().approvals[a.id]), decided: [...decided, ...all.decided] };
   }
-  if (url.pathname === "/api/controls") return { ...d.controls, ...DEMO_STATE.controls, events: [...DEMO_STATE.events, ...d.controls.events] };
+  if (url.pathname === "/api/controls") return { ...d.controls, ...ds().controls, events: [...ds().events, ...d.controls.events] };
   const m = url.pathname.match(/^\/api\/decisions\/(\d+)$/);
   if (m) {
     const det = d.details[m[1]] || d.decisions.find(x => String(x.id) === m[1]);
     if (!det) throw new ApiError(404, "No decision with that id.");
     return { reason: "", evidence: [], transcript: [], history: [], reviews: [], tools_used: [], attachments: [], ...det,
-             reviews: [...(DEMO_STATE.reviews[m[1]] || []), ...(det.reviews || [])] };
+             reviews: [...(ds().reviews[m[1]] || []), ...(det.reviews || [])] };
   }
   if (url.pathname === "/api/decisions") {
     let items = d.decisions.filter(x => (p.mode ? x.mode === p.mode : x.mode !== "audit"));
@@ -370,45 +400,46 @@ function demoGet(path) {
     if (p.flag === "guardrail") items = items.filter(x => x.guardrail_changed);
     if (p.flag === "fallback") items = items.filter(x => x.category === "rules_fallback");
     if (p.flag === "error") items = items.filter(x => x.error);
-    if (p.review === "unreviewed") items = items.filter(x => !x.review && !DEMO_STATE.reviews[x.id]);
+    if (p.review === "unreviewed") items = items.filter(x => !x.review && !ds().reviews[x.id]);
     if (p.review === "correct" || p.review === "incorrect") items = items.filter(x => x.review === p.review);
     const offset = Number(p.offset || 0), limit = Number(p.limit || 50);
     return { total: items.length, limit, offset, items: items.slice(offset, offset + limit) };
   }
   throw new ApiError(404, "Not found.");
 }
-const DEMO_STATE = { session: {}, controls: {}, events: [], reviews: {}, approvals: {} };
+const DEMO_STATES = {};  /* edits made in the demo, per desk */
+const ds = () => DEMO_STATES[DESK] || (DEMO_STATES[DESK] = { session: {}, controls: {}, events: [], reviews: {}, approvals: {} });
 function demoPost(path, body) {
   const am = path.match(/^\/api\/approvals\/(\d+)$/);
   if (am) {
-    const a = (DEMO.approvals.pending || []).find(x => String(x.id) === am[1]);
-    if (!a || DEMO_STATE.approvals[a.id]) throw new ApiError(409, "This reply is no longer waiting.");
+    const a = (DEMO.desks[DESK].approvals.pending || []).find(x => String(x.id) === am[1]);
+    if (!a || ds().approvals[a.id]) throw new ApiError(409, "This reply is no longer waiting.");
     const edited = body.reply != null && body.reply.trim() !== (a.reply_masked || "").trim();
-    const done = { ...a, status: body.verdict === "approve" ? "approved" : "rejected", decided_by: DEMO.session.user,
+    const done = { ...a, status: body.verdict === "approve" ? "approved" : "rejected", decided_by: DEMO.desks[DESK].session.user,
                    decided_at: new Date().toISOString(), comment: body.comment || null, edited: edited ? 1 : 0,
                    reply_masked: edited ? body.reply.trim() : a.reply_masked };
-    DEMO_STATE.approvals[a.id] = done;
-    DEMO_STATE.session.approvals_pending = Math.max(0, (DEMO.session.approvals_pending || 0) - Object.keys(DEMO_STATE.approvals).length);
+    ds().approvals[a.id] = done;
+    ds().session.approvals_pending = Math.max(0, (DEMO.desks[DESK].session.approvals_pending || 0) - Object.keys(ds().approvals).length);
     return done;
   }
   const m = path.match(/^\/api\/decisions\/(\d+)\/reviews$/);
   if (m) {
-    const review = { id: Date.now(), decision_id: Number(m[1]), created_at: new Date().toISOString(), reviewer: DEMO.session.user,
+    const review = { id: Date.now(), decision_id: Number(m[1]), created_at: new Date().toISOString(), reviewer: DEMO.desks[DESK].session.user,
                      verdict: body.verdict, expected_action: body.expected_action || null, comment: body.comment || null };
-    (DEMO_STATE.reviews[m[1]] = DEMO_STATE.reviews[m[1]] || []).unshift(review);
+    (ds().reviews[m[1]] = ds().reviews[m[1]] || []).unshift(review);
     return review;
   }
-  if (path === "/api/notifications/retry") { const n = DEMO_STATE.retried ? 0 : DEMO.notifications.retryable; DEMO_STATE.retried = true; return { requeued: n }; }
+  if (path === "/api/notifications/retry") { const n = ds().retried ? 0 : DEMO.desks[DESK].notifications.retryable; ds().retried = true; return { requeued: n }; }
   if (path === "/api/controls") {
-    const c = DEMO_STATE.controls;
+    const c = ds().controls;
     const now = new Date().toISOString();
-    if ("kill_switch" in body) { c.kill_switch = !!body.kill_switch; DEMO_STATE.session.kill_switch = c.kill_switch;
-      DEMO_STATE.events.unshift({ created_at: now, actor: DEMO.session.user, action: body.kill_switch ? "pause" : "resume", detail: body.note || "" }); }
+    if ("kill_switch" in body) { c.kill_switch = !!body.kill_switch; ds().session.kill_switch = c.kill_switch;
+      ds().events.unshift({ created_at: now, actor: DEMO.desks[DESK].session.user, action: body.kill_switch ? "pause" : "resume", detail: body.note || "" }); }
     if ("mode_override" in body) {
       c.mode_override = body.mode_override || null;
-      c.effective_mode = c.mode_override || DEMO.controls.configured_mode;
-      DEMO_STATE.session.effective_mode = c.effective_mode;
-      DEMO_STATE.events.unshift({ created_at: now, actor: DEMO.session.user, action: c.mode_override ? `hold at ${c.mode_override}` : "release mode hold", detail: body.note || "" });
+      c.effective_mode = c.mode_override || DEMO.desks[DESK].controls.configured_mode;
+      ds().session.effective_mode = c.effective_mode;
+      ds().events.unshift({ created_at: now, actor: DEMO.desks[DESK].session.user, action: c.mode_override ? `hold at ${c.mode_override}` : "release mode hold", detail: body.note || "" });
     }
     return demoGet("/api/controls");
   }
@@ -422,31 +453,7 @@ const ACTIONS = {
   escalate: { label: "Escalated to staff", short: "Escalated", cls: "crit", fill: "f-esc" },
   no_action: { label: "No action", short: "None", cls: "idle", fill: "f-none" },
 };
-const STATUS = {
-  delivered_check_spam: ["ok", "Gateway confirmed delivery; number matches Intellect"],
-  different_number: ["warn", "Ticket number differs from Intellect"],
-  no_txn_different_number: ["warn", "No alerts in window; ticket number differs from Intellect"],
-  no_number: ["warn", "No mobile number on Intellect"],
-  no_txn_no_number: ["warn", "No alerts in window and no number on Intellect"],
-  no_txn_number_match: ["ok", "Set up correctly; no alertable activity in the window"],
-  sms_not_enabled: ["warn", "Account-level SMS flag is off"],
-  sms_registration_disabled: ["warn", "IDCCOB SMS-alert registration is off"],
-  sms_no_customer_email: ["warn", "Alert not sent: no valid customer email in core (known platform issue)"],
-  salaries_match: ["ok", "Salaries: number matches customer_accounts_idc"],
-  salaries_phone_mismatch: ["warn", "Salaries: number differs on customer_accounts_idc"],
-  salaries_phone_missing: ["warn", "Salaries: no valid number on customer_accounts_idc"],
-  salaries_account_missing: ["warn", "Salaries: account not on customer_accounts_idc"],
-  salaries_unverified: ["crit", "Salaries: number matches but delivery cannot be proven"],
-  sms_activation_unknown: ["warn", "Account SMS flag could not be read"],
-  results_found: ["idle", "Alerts found; no ticket number to compare"],
-  invalid_ticket_phone: ["ask", "Phone on the ticket is not a valid mobile"],
-  invalid_account_number: ["ask", "Account not found in core banking"],
-  socket_pending: ["crit", "Alert still queued at the SMS gateway"],
-  socket_failed: ["crit", "SMS gateway failed to send"],
-  socket_not_found: ["crit", "Generated in core, never reached the gateway"],
-  socket_unknown: ["crit", "Gateway delivery could not be confirmed"],
-  both_alert_types_checked: ["idle", "Salaries and debits both checked"],
-};
+let STATUS = {};  /* the desk's status labels, from the service (see setDesk) */
 const MODES = { live: ["ok", "Live"], notes: ["ask", "Notes only"], shadow: ["idle", "Shadow"], audit: ["idle", "Audit replay"] };
 
 /* ---------------- helpers ---------------- */
@@ -549,7 +556,8 @@ function renderStrip() {
   const s = S.session; if (!s) return;
   const h = S.health || {};
   let agent;
-  if (s.kill_switch) agent = `<span class="pill warn"><span class="dot"></span>Paused</span>`;
+  if (S.service && S.service.paused) agent = `<a class="pill warn" href="#controls" style="text-decoration:none"><span class="dot"></span>Every desk paused</a>`;
+  else if (s.kill_switch) agent = `<span class="pill warn"><span class="dot"></span>Paused</span>`;
   else if (S.live && S.live.running) agent = `<a class="pill ok" href="#runs" style="text-decoration:none"><span class="dot"></span>Working${S.live.ticket_number ? ` on #${esc(S.live.ticket_number)}` : ""}${liveStep()}</a>`;
   else if (h.running) agent = `<span class="pill ok"><span class="dot"></span>Running a pass now</span>`;
   else if (h.stale) agent = `<span class="pill crit"><span class="dot"></span>No pass for ${h.minutes_since_last_run == null ? "a while" : Math.round(h.minutes_since_last_run) + " min"}</span>`;
@@ -613,7 +621,42 @@ async function render() {
 async function refreshQuiet() {
   try { const html = await PAGES[S.route](); $("#view").innerHTML = html; await loadSession(); } catch (_) { /* keep the last view */ }
 }
+function pickDesk(service) {
+  const keys = service.desks.map(x => x.key);
+  let want = new URLSearchParams(location.search).get("desk");
+  if (!keys.includes(want)) { try { want = localStorage.getItem("nmbz-desk"); } catch (_) { want = null; } }
+  return keys.includes(want) ? want : keys[0];
+}
+function setDesk(key) {
+  DESK = key;
+  const desk = S.service.desks.find(x => x.key === key);
+  V = desk.vocab; STATUS = V.status || {};
+  try { localStorage.setItem("nmbz-desk", key); } catch (_) { /* remembering the desk is optional */ }
+  $("#brand-desk").textContent = V.agent || desk.title;
+  document.title = `${desk.title} · Helpdesk Agents Console`;
+  renderDesks();
+}
+function deskHref(key) {
+  const q = new URLSearchParams(location.search); q.set("desk", key);
+  return `?${q.toString()}${location.hash || "#overview"}`;
+}
+function renderDesks() {
+  const svc = S.service; if (!svc) return;
+  $("#desks").innerHTML = svc.desks.length < 2 ? "" : svc.desks.map(x => {
+    const badges = [];
+    if (x.approvals_pending) badges.push(`<span class="badge ask" title="Replies waiting for approval">${x.approvals_pending}</span>`);
+    if (x.anomaly && x.anomaly.severity && x.anomaly.severity !== "ok") badges.push(`<span class="badge ${x.anomaly.severity === "incident" ? "crit" : "warn"}" title="${esc(x.anomaly.headline || "")}">${x.anomaly.severity === "incident" ? "incident" : "watch"}</span>`);
+    if (x.kill_switch || svc.paused) badges.push(`<span class="badge warn" title="Paused">paused</span>`);
+    return `<a href="${deskHref(x.key)}" data-desk="${esc(x.key)}" ${x.key === DESK ? 'aria-current="true"' : ""}>${esc(x.title)}<span class="badges">${badges.join("")}</span></a>`;
+  }).join("");
+}
+async function loadService() {
+  S.service = await apiGet(SERVICE_PATH);
+  if (!S.service.desks.length) throw new ApiError(0, "No desk is switched on (DESKS in the server's .env).");
+  if (!DESK) setDesk(pickDesk(S.service)); else renderDesks();
+}
 async function loadSession() {
+  try { await loadService(); } catch (err) { if (!S.service) throw err; }
   S.session = await apiGet("/api/session");
   try { S.health = (await apiGet("/api/overview?days=1")).health; } catch (_) { S.health = null; }
   renderStrip();
@@ -627,17 +670,10 @@ const ACTION_SERIES = [
   { key: "escalate", label: "Escalated", fill: "f-esc" },
   { key: "no_action", label: "No action", fill: "f-none" },
 ];
-const GATEWAY_SERIES = [
-  { key: "delivered", label: "Delivered", fill: "f-delivered" },
-  { key: "queued", label: "Still queued", fill: "f-queued" },
-  { key: "failed", label: "Failed at gateway", fill: "f-failed" },
-  { key: "never_sent", label: "Never reached gateway", fill: "f-never" },
-  { key: "unknown", label: "Could not confirm", fill: "f-unknown" },
-];
 
 function decisionsTable(items, opts = {}) {
   if (!items.length) return `<p class="empty">${esc(opts.empty || "No decisions match.")}</p>`;
-  return `<div class="table-wrap"><table><thead><tr><th>When</th><th>Ticket</th><th>Outcome</th><th>Checks found</th><th class="nowrap">Conf.</th>${opts.mode ? "<th>Mode</th>" : ""}<th>Review</th></tr></thead><tbody>
+  return `<div class="table-wrap"><table><thead><tr><th>When</th><th>Ticket</th><th>Outcome</th><th>${esc(V.found_col)}</th><th class="nowrap">Conf.</th>${opts.mode ? "<th>Mode</th>" : ""}<th>Review</th></tr></thead><tbody>
   ${items.map(d => `<tr class="click" data-href="#decision-${d.id}">
     <td class="nowrap num">${esc(when(d.created_at))}</td>
     <td>${ticketLink(d.ticket_number, d.ticket_id)}</td>
@@ -654,7 +690,7 @@ PAGES.overview = async () => {
   S.health = o.health; renderStrip();
   const k = o.kpis;
   const cost = k.est_cost != null ? `$${k.est_cost.toFixed(2)}` : `${fmtInt(k.input_tokens + k.output_tokens)}`;
-  return `<div class="head"><div><h1>Overview</h1><p>What the agent decided over the last ${o.days} days, and what its checks say about SMS delivery.</p></div>
+  return `<div class="head"><div><h1>Overview</h1><p>What the agent decided over the last ${o.days} days, and ${esc(V.overview_sub)}.</p></div>
     <div class="field"><label for="ov-days">Period</label><select id="ov-days" data-filter="days">${[7, 14, 30].map(d => `<option value="${d}" ${String(d) === String(o.days) ? "selected" : ""}>Last ${d} days</option>`).join("")}</select></div></div>
   <div class="stack">
     ${S.session && S.session.anomaly && S.session.anomaly.severity !== "ok" ? `<a href="#anomalies" class="panel" style="text-decoration:none;color:inherit;border-left:4px solid ${S.session.anomaly.severity === "incident" ? "var(--crit)" : "var(--warn)"};border-radius:0 8px 8px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap">${sevPill(S.session.anomaly.severity)}<b>${esc(S.session.anomaly.headline)}</b><span class="faint">${esc(ago(S.session.anomaly.created_at))} · see Anomalies</span></a>` : ""}
@@ -671,15 +707,15 @@ PAGES.overview = async () => {
     <div class="grid-even">
       <section class="panel chart"><header><div><h2>Decisions per day</h2><p>Every decision the agent made, by outcome.</p></div></header>
         ${stackedBars(o.by_day, ACTION_SERIES, { label: "Decisions per day by outcome" })}${legend(ACTION_SERIES)}</section>
-      <section class="panel chart"><header><div><h2>SMS gateway outcomes</h2><p>What the delivery checks found, per account checked. A rise in red usually means a gateway or CAE incident, not handsets.</p></div></header>
-        ${stackedBars(o.gateway_by_day, GATEWAY_SERIES, { label: "Gateway outcomes per day" })}${legend(GATEWAY_SERIES)}
-        <div class="hops"><span>CAE request</span>→<span>render</span>→<span>dispatch</span>→<span>gateway</span>→<span>handset</span></div></section>
+      <section class="panel chart"><header><div><h2>${esc(V.chart.title)}</h2><p>${esc(V.chart.desc)}</p></div></header>
+        ${stackedBars(o[V.chart.key] || [], V.chart.series, { label: V.chart.label })}${legend(V.chart.series)}
+        ${(V.chart.hops || []).length ? `<div class="hops">${V.chart.hops.map(h => `<span>${esc(h)}</span>`).join("→")}</div>` : ""}</section>
     </div>
     <div class="grid-2">
       <section class="panel"><header><div><h2>Latest decisions</h2></div><a class="btn" href="#decisions">All decisions</a></header>
         ${decisionsTable(o.recent)}</section>
       <div class="stack">
-        <section class="panel"><header><div><h2>What the checks found</h2><p>Status codes across all accounts checked.</p></div></header>
+        <section class="panel"><header><div><h2>${esc(V.found_heading)}</h2><p>${esc(V.found_sub)}</p></div></header>
           ${barList(o.top_statuses, i => `${statusChip(i.status)} <span class="muted">${esc((STATUS[i.status] || [, ""])[1])}</span>`)}</section>
         <section class="panel"><header><div><h2>Why safety rules stepped in</h2><p>When the model's proposal was changed before anything was posted.</p></div></header>
           ${barList(o.guardrail_reasons, i => esc(i.reason))}</section>
@@ -696,7 +732,7 @@ const sevPill = sv => { const [cls, label] = SEV[sv] || ["idle", sv]; return `<s
 function findingsTable(comp, emptyText) {
   if (!comp || !comp.findings || !comp.findings.length) return `<p class="empty">${esc(emptyText)}</p>`;
   const bar = (v, cls) => `<span class="track" style="display:inline-block;width:90px;height:6px;background:var(--surface-2);border-radius:3px;vertical-align:middle;overflow:hidden"><span class="${cls}" style="display:block;height:100%;width:${Math.round(v * 100)}%"></span></span>`;
-  return `<div class="table-wrap"><table><thead><tr><th>Detail</th><th>Value</th><th>Share of failures</th><th>Share of deliveries</th><th class="num">More common</th></tr></thead><tbody>
+  return `<div class="table-wrap"><table><thead><tr><th>Detail</th><th>Value</th><th>Share of failures</th><th>${esc(V.anomaly.ok_share_label)}</th><th class="num">More common</th></tr></thead><tbody>
   ${comp.findings.map(f => `<tr><td>${esc(f.label)}</td><td><b>${esc(f.value)}</b></td>
     <td class="nowrap num">${bar(f.failed_share, "f-failed")} ${Math.round(f.failed_share * 100)}% <span class="faint">(${f.failed_n})</span></td>
     <td class="nowrap num">${bar(f.ok_share, "f-delivered")} ${Math.round(f.ok_share * 100)}%</td>
@@ -716,16 +752,19 @@ const groupReports = history => {
 PAGES.anomalies = async () => {
   const res = await apiGet(S.id ? `/api/anomalies/${encodeURIComponent(S.id)}` : "/api/anomalies");
   const r = res.report;
-  if (!r) return `<div class="head"><div><h1>Anomalies</h1><p>The anomaly watch has not run yet. It runs inside the agent's passes once an hour, or on demand with <span class="mono">python -m agent anomalies</span>.</p></div></div>`;
+  if (!r) return `<div class="head"><div><h1>Anomalies</h1><p>The anomaly watch has not run yet. It runs inside the agent's passes once an hour, or on demand with <span class="mono">python -m nmbz anomalies --desk ${esc(DESK)}</span>.</p></div></div>`;
   const sm = r.summary || {}, an = r.analysis || {}, d = r.data || {};
   const signals = (an.signals || []).filter(x => x.value != null || x.severity !== "ok");
   const tickets = (d.tickets && d.tickets.daily) || [];
   const usual = d.tickets && d.tickets.baseline && d.tickets.baseline.length ? [...d.tickets.baseline].sort((a, b) => a - b)[Math.floor(d.tickets.baseline.length / 2)] : null;
-  const hourly = ((d.gateway && d.gateway.hourly) || []).slice(-48);
+  const A = V.anomaly;
+  const hourly = ((d[A.hourly.source] && d[A.hourly.source].hourly) || []).slice(-48);
+  const baselineDays = (A.baseline_from && d[A.baseline_from] && d[A.baseline_from].baseline_days) || d.baseline_days || 14;
+  const fill = (text, vals) => esc(text).replace(/\{(\w+)\}/g, (_, k) => vals[k] == null ? "" : vals[k]);
   const unavailable = Object.entries(an.sources || {}).filter(([, v]) => !v.available);
   const sevBorder = { incident: "var(--crit)", watch: "var(--warn)", ok: "var(--ok)" }[r.severity] || "var(--line)";
   const comps = an.comparisons || {};
-  return `<div class="head"><div><h1>Anomalies</h1><p>Every hour the watch compares the last 24 hours with the usual level, for SMS Alerts ticket volume and for every hop that carries an alert, then compares the failing alerts with the delivered ones to find what they have in common.</p></div>
+  return `<div class="head"><div><h1>Anomalies</h1><p>${esc(A.intro)}</p></div>
     <span class="faint">Report from ${esc(when(r.created_at))}${S.id ? ` · <a href="#anomalies">latest</a>` : ""}</span></div>
   <div class="stack">
     <section class="panel" style="border-left:4px solid ${sevBorder};border-radius:0 8px 8px 0">
@@ -739,23 +778,21 @@ PAGES.anomalies = async () => {
         <section class="panel"><header><h2>Next steps</h2></header>${(sm.actions || []).length ? `<ol style="margin:0;padding-left:18px;display:grid;gap:6px">${sm.actions.map(c => `<li>${esc(c)}</li>`).join("")}</ol>` : `<p class="faint">None suggested.</p>`}</section>
         ${sm.branch_message ? `<section class="panel"><header><div><h2>Suggested note to branches</h2><p>Not sent automatically.</p></div><button class="btn" data-action="copy-branch">Copy</button></header><div class="reply" id="branch-msg">${esc(sm.branch_message)}</div></section>` : ""}
       </div></div>` : ""}
-    <section class="panel"><header><div><h2>Signals</h2><p>Last 24 hours (today for dispatch and CAE) against the usual level over the previous ${esc(d.baseline_days || 14)} days.</p></div></header>
+    <section class="panel"><header><div><h2>Signals</h2><p>${fill(A.signals_sub, { baseline_days: baselineDays })}</p></div></header>
       ${signals.length ? `<div class="table-wrap"><table><thead><tr><th>Signal</th><th>Now</th><th>Usual</th><th>Status</th><th>Detail</th></tr></thead><tbody>
       ${signals.map(x => `<tr><td>${esc(x.label)}</td><td class="num"><b>${esc(x.value == null ? "" : x.value)}</b></td><td class="num">${esc(x.usual == null ? "" : x.usual)}</td><td>${sevPill(x.severity)}</td><td class="muted">${esc(x.detail)}</td></tr>`).join("")}</tbody></table></div>`
       : `<p class="empty">Not enough data yet to compare.</p>`}
       ${unavailable.length ? `<p class="faint" style="margin-bottom:0">Could not check: ${unavailable.map(([k, v]) => `${esc(k)} (${esc(v.error || "unavailable")})`).join("; ")}</p>` : ""}
     </section>
-    <section class="panel"><header><div><h2>What is different about the failing alerts</h2><p>At the gateway: ${fmtInt((comps.gateway || {}).failed_n)} failed or stuck sends compared with ${fmtInt((comps.gateway || {}).delivered_n)} delivered ones from the same 24 hours. A detail that is much more common among failures points at the cause.</p></div></header>
-      ${findingsTable(comps.gateway, "Nothing stands out: failing and delivered alerts look alike.")}
-      ${((comps.gateway || {}).errors || []).length ? `<p class="muted" style="margin:12px 0 0">Most common provider errors among the failures: ${comps.gateway.errors.map(e => `<b>${esc(e.value)}</b> ${Math.round(e.failed_share * 100)}%`).join(" · ")}</p>` : ""}</section>
-    <section class="panel"><header><div><h2>Same comparison for the tickets the agent checked</h2><p>${fmtInt((comps.tickets || {}).failed_n)} accounts whose alerts did not reach the client, compared with ${fmtInt((comps.tickets || {}).delivered_n)} whose alerts were delivered.</p></div></header>
-      ${findingsTable(comps.tickets, "Not enough checked tickets in the window, or nothing stands out.")}</section>
+    ${A.comparisons.map(c => { const comp = comps[c.key] || {}; return `<section class="panel"><header><div><h2>${esc(c.title)}</h2><p>${fill(c.desc, { failed_n: fmtInt(comp.failed_n), ok_n: fmtInt(comp[c.ok_key]) })}</p></div></header>
+      ${findingsTable(comp, c.empty)}
+      ${c.errors && (comp.errors || []).length ? `<p class="muted" style="margin:12px 0 0">${esc(c.errors)}: ${comp.errors.map(e => `<b>${esc(e.value)}</b> ${Math.round(e.failed_share * 100)}%`).join(" · ")}</p>` : ""}</section>`; }).join("")}
     <div class="grid-even">
-      <section class="panel chart"><header><div><h2>SMS Alerts tickets per day</h2><p>Dashed line: the usual number per 24 hours.</p></div></header>
+      <section class="panel chart"><header><div><h2>${esc(A.tickets_title)}</h2><p>Dashed line: the usual number per 24 hours.</p></div></header>
         ${tickets.length ? stackedBars(tickets.map(t => ({ day: t.day, count: t.count })), [{ key: "count", label: "Tickets", fill: "f-esc" }], { label: "Tickets per day", refLine: usual }) : `<p class="empty">No ticket data.</p>`}</section>
-      <section class="panel chart"><header><div><h2>Gateway outcomes, last 48 hours</h2><p>Per hour, from the SMS gateway's own records.</p></div></header>
-        ${hourly.length ? stackedBars(hourly.map(h => ({ ...h, day: h.hour })), [{ key: "delivered", label: "Delivered", fill: "f-delivered" }, { key: "pending", label: "Awaiting delivery", fill: "f-queued" }, { key: "failed", label: "Failed", fill: "f-failed" }],
-          { label: "Gateway outcomes per hour", labelFn: rr => rr.hour.slice(11, 13) + "h" }) + legend([{ label: "Delivered", fill: "f-delivered" }, { label: "Awaiting delivery", fill: "f-queued" }, { label: "Failed", fill: "f-failed" }]) : `<p class="empty">Gateway data unavailable.</p>`}</section>
+      <section class="panel chart"><header><div><h2>${esc(A.hourly.title)}</h2><p>${esc(A.hourly.desc)}</p></div></header>
+        ${hourly.length ? stackedBars(hourly.map(h => ({ ...h, day: h.hour })), A.hourly.series,
+          { label: A.hourly.label, labelFn: rr => rr.hour.slice(11, 13) + "h" }) + legend(A.hourly.series) : `<p class="empty">${esc(A.hourly.empty)}</p>`}</section>
     </div>
     <section class="panel"><header><div><h2>Recent reports</h2><p>One report an hour; consecutive reports about the same thing are grouped. Open one to see that hour's analysis.</p></div></header>
       <div class="table-wrap"><table><thead><tr><th>From</th><th>To</th><th class="num">Reports</th><th>Status</th><th>Latest headline</th><th>Admin alerts</th></tr></thead><tbody>
@@ -774,13 +811,13 @@ PAGES.queue = async () => {
     return `<span class="pill outline">${esc(it.state)}</span>`;
   };
   const summaryChips = Object.entries(counts).map(([k, v]) => `<span class="pill ${ACTIONS[k] ? ACTIONS[k].cls : k === "error" ? "crit" : "outline"}">${esc(ACTIONS[k] ? ACTIONS[k].short : k)} · ${v}</span>`).join(" ");
-  return `<div class="head"><div><h1>Open tickets</h1><p>Every open SMS Alerts ticket, plus SMS alerts issues found under other topics, as of the last full pass${q.as_of ? ` (${esc(when(q.as_of.finished_at || q.as_of.started_at))}, ${esc(ago(q.as_of.finished_at || q.as_of.started_at))})` : ""}, and what the agent did with it.</p></div>
+  return `<div class="head"><div><h1>Open tickets</h1><p>${esc(V.queue_sub)}, as of the last full pass${q.as_of ? ` (${esc(when(q.as_of.finished_at || q.as_of.started_at))}, ${esc(ago(q.as_of.finished_at || q.as_of.started_at))})` : ""}, and what the agent did with it.</p></div>
     <div class="chips">${summaryChips}</div></div>
-  <section class="panel">${q.items.length ? `<div class="table-wrap"><table><thead><tr><th>Ticket</th><th>Help topic</th><th>Opened</th><th>This pass</th><th>Why</th><th>Checks found</th></tr></thead><tbody>
+  <section class="panel">${q.items.length ? `<div class="table-wrap"><table><thead><tr><th>Ticket</th><th>Help topic</th><th>Opened</th><th>This pass</th><th>Why</th><th>${esc(V.found_col)}</th></tr></thead><tbody>
     ${q.items.map(it => `<tr ${it.decision_id ? `class="click" data-href="#decision-${it.decision_id}"` : ""}>
       <td>${ticketLink(it.ticket_number, it.ticket_id)}</td><td>${esc(it.help_topic)}</td><td class="nowrap num">${esc(when(it.opened))}</td>
       <td>${stateCell(it)}</td><td class="muted">${esc(it.detail || (it.final_action ? (ACTIONS[it.final_action] || {}).label : ""))}</td><td>${statusChips(it.statuses)}</td></tr>`).join("")}
-  </tbody></table></div>` : `<p class="empty">No open SMS Alerts tickets at the last pass.</p>`}</section>`;
+  </tbody></table></div>` : `<p class="empty">${esc(V.queue_empty)}</p>`}</section>`;
 };
 
 PAGES.decisions = async () => {
@@ -788,7 +825,7 @@ PAGES.decisions = async () => {
   const qs = new URLSearchParams({ ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)), limit: 50, offset: S.offset });
   const res = await apiGet(`/api/decisions?${qs}`);
   const opt = (pairs, val) => pairs.map(([v, l]) => `<option value="${esc(v)}" ${v === val ? "selected" : ""}>${esc(l)}</option>`).join("");
-  const exportHref = SERVED ? `/api/export/decisions.csv?${new URLSearchParams(Object.fromEntries(Object.entries(f).filter(([, v]) => v)))}` : null;
+  const exportHref = SERVED ? `${deskPath("/api/export/decisions.csv")}?${new URLSearchParams(Object.fromEntries(Object.entries(f).filter(([, v]) => v)))}` : null;
   return `<div class="head"><div><h1>Decisions</h1><p>Every decision the agent recorded. Customer numbers are masked in this log; open a decision to see the reasoning and review it.</p></div>
     ${exportHref ? `<a class="btn" href="${esc(exportHref)}">Export CSV</a>` : `<span class="faint" title="Export works on the portal server">Export CSV (on the server)</span>`}</div>
   <form class="filters" id="filters">
@@ -844,9 +881,9 @@ PAGES.decision = async () => {
       ${(d.guardrail_notes || []).length ? `<div class="note"><b>Safety rules:</b> ${d.guardrail_notes.map(n => tokens(n)).join("<br>")}</div>` : ""}
       ${d.approval ? `<div class="why-box"><b>${esc(APPROVAL_STATES[d.approval.status] || d.approval.status)}.</b> ${tokens(d.approval.why || "")}${d.approval.decided_by ? ` · ${esc(d.approval.decided_by)} ${esc(when(d.approval.decided_at))}` : ""}${d.approval.comment ? `<br>${esc(d.approval.comment)}` : ""}${d.approval.status === "pending" ? ` <a href="#approvals">Open the approval desk</a>` : ""}</div>`
         : d.approval_note ? `<div class="why-box">${esc(d.approval_note)}</div>` : ""}
-      <section class="panel"><header><h2>What the checks found</h2></header>
-        ${accounts.length ? accounts.map(([acct, st]) => `<div class="acct"><div>${tokens(acct)} ${statusChip(st)}</div><div class="muted">${esc((STATUS[st] || [, ""])[1])}</div></div>`).join("")
-          : `<p class="faint">No account was checked.</p>`}
+      <section class="panel"><header><h2>${esc(V.found_heading)}</h2></header>
+        ${accounts.length ? accounts.map(([acct, st]) => `<div class="acct"><div>${acct === "latest" ? "Latest attempt" : tokens(acct)} ${statusChip(st)}</div><div class="muted">${esc((STATUS[st] || [, ""])[1])}</div></div>`).join("")
+          : `<p class="faint">${esc(V.found_none)}</p>`}
         ${(d.tools_used || []).length ? `<p class="faint" style="margin-bottom:0">Tools used: ${d.tools_used.map(t => `<span class="mono">${esc(t)}</span>`).join(", ")}</p>` : ""}
       </section>
       ${(d.attachments || []).length ? `<section class="panel"><header><div><h2>Attachments</h2><p>What the agent was shown from each file on the ticket. Images and PDFs are read by the model in a separate call that sees the file itself.</p></div></header>
@@ -855,7 +892,7 @@ PAGES.decision = async () => {
       ${d.reply_text ? `<section class="panel"><header><h2>${esc(replyLabel)}</h2><p>Masked values are filled in with the real numbers when posted.</p></header>
         <div class="reply ${d.mode === "live" && (d.executed || []).includes("reply") ? "posted" : ""}">${tokens(d.reply_text)}</div></section>` : ""}
       ${d.template_reply || d.actual_reply ? `<section class="panel"><header><h2>Compare</h2></header><div class="stack">
-        ${d.template_reply ? `<div><div class="label">Standard wording (the old Java reply)</div><div class="reply">${tokens(d.template_reply)}</div></div>` : ""}
+        ${d.template_reply ? `<div><div class="label">${esc(V.template_label)}</div><div class="reply">${tokens(d.template_reply)}</div></div>` : ""}
         ${d.actual_reply ? `<div><div class="label">Actually posted on the ticket</div><div class="reply">${tokens(d.actual_reply)}</div></div>` : ""}</div></section>` : ""}
       <section class="panel"><header><h2>Reasoning</h2></header>
         <p style="margin-top:0">${tokens(d.reason || "–")}</p>
@@ -912,7 +949,7 @@ PAGES.review = async () => {
           ${q.by_action.map(r => `<tr><td>${actionPill(r.action)}</td><td class="num">${r.reviewed}</td><td class="num">${pct(r.correct, r.reviewed)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="empty">No reviews yet.</p>`}</section>
         <section class="panel"><header><div><h2>Most common corrections</h2><p>What reviewers said it should have done instead.</p></div></header>
           ${barList(q.corrections, i => `${esc((ACTIONS[i.agent] || {}).short || i.agent)} → <b>${esc((ACTIONS[i.expected] || {}).label || i.expected)}</b>`)}</section>
-        <section class="panel"><header><div><h2>Closed-ticket replays</h2><p>From <span class="mono">python -m agent audit</span>: what the agent would have done on tickets that are already closed.</p></div></header>
+        <section class="panel"><header><div><h2>Closed-ticket replays</h2><p>From <span class="mono">python -m nmbz audit --desk ${esc(DESK)}</span>: what the agent would have done on tickets that are already closed.</p></div></header>
           ${a.tickets ? barList(Object.entries(a.actions).map(([k, v]) => ({ k, count: v })), i => actionPill(i.k)) : `<p class="empty">No replays in the last 30 days.</p>`}</section>
       </div>
     </div>
@@ -958,7 +995,7 @@ PAGES.runs = async () => {
       <td class="num">${x.finished_at ? (x.duration_s == null ? "–" : x.duration_s < 90 ? x.duration_s + " s" : Math.round(x.duration_s / 60) + " min") : `<span class="pill ok">running</span>`}</td>
       <td class="num">${fmtInt(x.tickets_seen)}</td><td class="num">${fmtInt(x.decisions)}</td>
       <td class="num">${x.errors ? `<span class="chip crit">${x.errors}</span>` : "0"}</td><td class="mono faint">${esc(x.run_id)}</td></tr>`).join("")}
-  </tbody></table></div>` : `<p class="empty">No runs recorded yet. Start the timer, or run <span class="mono">python -m agent run</span> once.</p>`}</section>`;
+  </tbody></table></div>` : `<p class="empty">No runs recorded yet. Start the timer, or run <span class="mono">python -m nmbz run</span> once.</p>`}</section>`;
 };
 
 PAGES.controls = async () => {
@@ -971,7 +1008,7 @@ PAGES.controls = async () => {
     <div class="stack">
       <section class="panel control"><header><div><h2>Pause the agent</h2><p>A paused agent starts no new passes and stops after the ticket it is working on.</p></div></header>
         <div class="big-state">${c.kill_switch ? `<span class="pill warn"><span class="dot"></span>Paused</span><b>Not processing tickets</b>` : `<span class="pill ok"><span class="dot"></span>Active</span><b>Processing every 15 minutes</b>`}</div>
-        <div class="field"><label for="ctl-note">Reason (kept in the log below)</label><input type="text" id="ctl-note" maxlength="300" placeholder="e.g. gateway incident INC-2231" ${dis}></div>
+        <div class="field"><label for="ctl-note">Reason (kept in the log below)</label><input type="text" id="ctl-note" maxlength="300" placeholder="${esc(V.pause_placeholder)}" ${dis}></div>
         <div id="pause-zone">${c.kill_switch
           ? `<button class="btn good" data-action="resume" ${dis}>Resume the agent</button>`
           : `<button class="btn danger" data-action="ask-pause" ${dis}>Pause the agent…</button>`}</div>
@@ -982,10 +1019,17 @@ PAGES.controls = async () => {
         <div><button class="btn primary" data-action="save-hold" ${dis}>Save mode hold</button></div>
       </section>
     </div>
+    <div class="stack">
+    ${S.service && S.service.desks.length > 1 ? `<section class="panel control"><header><div><h2>Every desk</h2><p>Stops the whole service: no desk starts a pass until it is resumed. The pause above stops only the ${esc(V.title)} desk.</p></div></header>
+      <div class="big-state">${S.service.paused ? `<span class="pill warn"><span class="dot"></span>Paused</span><b>No desk is processing tickets</b>` : `<span class="pill ok"><span class="dot"></span>Running</span><b>${S.service.desks.length} desks, one pass every 15 minutes</b>`}</div>
+      <div id="pause-all-zone">${S.service.paused
+        ? `<button class="btn good" data-action="resume-all" ${dis}>Resume every desk</button>`
+        : `<button class="btn danger" data-action="ask-pause-all" ${dis}>Pause every desk…</button>`}</div></section>` : ""}
     <section class="panel"><header><div><h2>Control log</h2><p>Who paused, resumed or held the agent, and why.</p></div></header>
       ${c.events.length ? `<div class="table-wrap"><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Reason</th></tr></thead><tbody>
       ${c.events.map(e => `<tr><td class="nowrap num">${esc(when(e.created_at))}</td><td>${esc(e.actor)}</td><td><b>${esc(e.action)}</b></td><td class="muted">${esc(e.detail || "")}</td></tr>`).join("")}</tbody></table></div>`
       : `<p class="empty">No control changes yet.</p>`}</section>
+    </div>
   </div>`;
 };
 
@@ -1211,6 +1255,16 @@ document.addEventListener("click", async e => {
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn danger" data-action="pause">Pause now</button><button class="btn" data-action="cancel">Cancel</button></div></div>`;
       return;
     }
+    if (act.dataset.action === "ask-pause-all") {
+      $("#pause-all-zone").innerHTML = `<div class="confirm"><b>Pause every desk?</b><span class="muted">No desk starts a new pass. Tickets stay open and untouched until someone resumes the service.</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn danger" data-action="pause-all">Pause every desk</button><button class="btn" data-action="cancel">Cancel</button></div></div>`;
+      return;
+    }
+    if (act.dataset.action === "pause-all" || act.dataset.action === "resume-all") {
+      S.service = await apiPost(`${SERVICE_PATH}/controls`, { pause: act.dataset.action === "pause-all", note });
+      toast(act.dataset.action === "pause-all" ? "Every desk paused" : "Every desk resumed");
+      renderDesks(); renderStrip(); render(); return;
+    }
     if (act.dataset.action === "cancel") { render(); return; }
     if (act.dataset.action === "pause" || act.dataset.action === "resume") {
       await apiPost("/api/controls", { kill_switch: act.dataset.action === "pause", note });
@@ -1256,13 +1310,28 @@ document.addEventListener("submit", async e => {
   } catch (err) { toast(err.message); }
 });
 window.addEventListener("hashchange", () => { window.scrollTo(0, 0); render(); });
+document.addEventListener("click", async e => {
+  const a = e.target.closest && e.target.closest("#desks a[data-desk]");
+  if (!a || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+  e.preventDefault();
+  const key = a.dataset.desk; if (key === DESK) return;
+  try { history.replaceState(null, "", deskHref(key)); } catch (_) { /* file:// previews */ }
+  setDesk(key); S.filters.q = ""; S.offset = 0; S.id = null; S.live = null;
+  $("#view").innerHTML = `<p class="loading">Loading…</p>`;
+  try { await loadSession(); await loadCounts(); } catch (err) { $("#view").innerHTML = errorBox(err); return; }
+  render();
+}, true);
 let resizeTimer, lastW = window.innerWidth;
 window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (S.route === "overview" && Math.abs(window.innerWidth - lastW) > 40) { lastW = window.innerWidth; render(); } }, 250); });
 
-(async function start() {
-  if (DEMO) $("#demo").innerHTML = `<div class="demo-banner"><b>Demo data.</b> This is a preview of the console with invented tickets. On the agent server it shows the real decision log, and changes you make here are not saved anywhere.</div>`;
-  try { await loadSession(); } catch (err) { $("#view").innerHTML = errorBox(err); return; }
+async function loadCounts() {
+  for (const id of ["#nav-review", "#nav-queue", "#nav-emails"]) $(id).textContent = "";
   try { const q = await apiGet("/api/quality?days=30"); $("#nav-review").textContent = q.needs_review.length || ""; const qq = await apiGet("/api/queue"); $("#nav-queue").textContent = qq.items.length || ""; const nn = await apiGet("/api/notifications?days=30"); $("#nav-emails").textContent = (nn.counts || {}).failed || ""; } catch (_) { /* counts are optional */ }
+}
+(async function start() {
+  if (DEMO) $("#demo").innerHTML = `<div class="demo-banner"><b>Demo data.</b> This is a preview of the console with invented tickets for each desk. On the agent server it shows the real decision log, and changes you make here are not saved anywhere.</div>`;
+  try { await loadSession(); } catch (err) { $("#view").innerHTML = errorBox(err); return; }
+  await loadCounts();
   render();
   pollLive(); setInterval(pollLive, 5000);
 })();

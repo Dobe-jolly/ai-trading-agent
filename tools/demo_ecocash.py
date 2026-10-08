@@ -1,14 +1,13 @@
-"""Build preview.html: the console with an embedded snapshot of invented demo data.
+"""Invented demo data for the ecocash desk's part of the console preview (tools/build_preview.py).
 
 The snapshot is produced by seeding a throwaway SQLite log and running the portal's real read
 models (and the real anomaly analysis) over it, so the preview shows what the server returns.
 No bank data is involved: every number and name here is invented.
 
-    python tools/build_preview.py [--out preview.html]
+    (built by tools/build_preview.py)
 """
 from __future__ import annotations
 
-import argparse
 import json
 import random
 import sys
@@ -28,7 +27,6 @@ from agentcore.audit import AuditLog  # noqa: E402
 from ecocash.config import Settings  # noqa: E402
 from ecocash.normalize import LOCAL_ZONE  # noqa: E402
 from ecocash.portal import data  # noqa: E402
-from ecocash.portal.server import SERVED_MARKER, STATIC  # noqa: E402
 
 R = random.Random(20261008)
 NOW = datetime.now(timezone.utc).replace(microsecond=0)
@@ -440,7 +438,8 @@ def seed_approvals(audit: AuditLog) -> None:
         audit.live_step(step)
 
 
-def build(out: Path) -> None:
+def snapshot() -> dict:
+    """This desk's console data from a throwaway log seeded with invented tickets."""
     with tempfile.TemporaryDirectory() as tmp:
         db_path = Path(tmp) / "demo.sqlite"
         audit = AuditLog(db_path)
@@ -475,14 +474,4 @@ def build(out: Path) -> None:
             "details": details,
         }
         audit.close()
-    payload = json.dumps(snapshot, default=str, separators=(",", ":")).replace("</", "<\\/")
-    page = STATIC.read_text(encoding="utf-8").replace(
-        SERVED_MARKER, f'<script id="demo-data" type="application/json">{payload}</script>', 1)
-    out.write_text(page, encoding="utf-8")
-    print(f"Wrote {out} ({len(page) // 1024} KB, {len(summaries)} demo decisions)")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--out", default=str(ROOT / "preview.html"))
-    build(Path(parser.parse_args().out))
+    return snapshot

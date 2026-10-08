@@ -1,20 +1,20 @@
 """Command line entry point.
 
-    python -m agent check [--ping-model]            validate config, Metabase databases, prompt
-    python -m agent run [--mode shadow|notes|live]  one pass over open EcoCash tickets
-    python -m agent run --ticket 123456             one ticket, ignoring the skip rules
-    python -m agent lookup --mobile 0771234567      a client's link attempts, link record, account (no model)
-    python -m agent monitor                         follow ecocashreg.service and record every attempt
-    python -m agent monitor --from-file log.txt     import a saved journal export (add --dry-run to just count)
-    python -m agent audit --since 2026-09-01        replay closed tickets, compare with what was posted
-    python -m agent compare --since 2026-10-01      shadow decisions vs what actually happened
-    python -m agent report --since 2026-10-01       export the decision log to CSV
-    python -m agent attachments --ticket 123456     what the agent would read from a ticket's files
-    python -m agent portal                          the audit and monitoring portal (port 8086)
-    python -m agent portal-user add dobe --role admin
-    python -m agent notify-test --to you@example.com   one sample branch email
-    python -m agent notify-retry                      re-send emails that failed
-    python -m agent anomalies [--alert]               run the anomaly watch now
+    python -m nmbz --desk ecocash check [--ping-model]            validate config, Metabase databases, prompt
+    python -m nmbz --desk ecocash run [--mode shadow|notes|live]  one pass over open EcoCash tickets
+    python -m nmbz --desk ecocash run --ticket 123456             one ticket, ignoring the skip rules
+    python -m nmbz --desk ecocash lookup --mobile 0771234567      a client's link attempts, link record, account (no model)
+    python -m nmbz --desk ecocash monitor                         follow ecocashreg.service and record every attempt
+    python -m nmbz --desk ecocash monitor --from-file log.txt     import a saved journal export (add --dry-run to just count)
+    python -m nmbz --desk ecocash audit --since 2026-09-01        replay closed tickets, compare with what was posted
+    python -m nmbz --desk ecocash compare --since 2026-10-01      shadow decisions vs what actually happened
+    python -m nmbz --desk ecocash report --since 2026-10-01       export the decision log to CSV
+    python -m nmbz --desk ecocash attachments --ticket 123456     what the agent would read from a ticket's files
+    python -m nmbz portal                           the console for every desk (port 8085)
+    python -m nmbz --desk ecocash portal-user add dobe --role admin
+    python -m nmbz --desk ecocash notify-test --to you@example.com   one sample branch email
+    python -m nmbz --desk ecocash notify-retry                      re-send emails that failed
+    python -m nmbz --desk ecocash anomalies [--alert]               run the anomaly watch now
 """
 from __future__ import annotations
 
@@ -384,14 +384,10 @@ def cmd_attachments(s: Settings, args: argparse.Namespace) -> int:
 
 
 def cmd_portal(s: Settings, args: argparse.Namespace) -> int:
-    from dataclasses import replace
+    """The console serves every desk (python -m nmbz portal); started from here it is the same console."""
+    from nmbz.console import serve
 
-    from .portal.server import serve
-
-    if args.host or args.port:
-        s = replace(s, portal_host=args.host or s.portal_host, portal_port=args.port or s.portal_port)
-    serve(s)
-    return 0
+    return serve(args.env_file, host=args.host, port=args.port)
 
 
 def cmd_portal_user(s: Settings, args: argparse.Namespace) -> int:
@@ -552,7 +548,7 @@ def cmd_compare(s: Settings, args: argparse.Namespace) -> int:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m agent", description="EcoCash osTicket agent")
+    parser = argparse.ArgumentParser(prog="python -m nmbz --desk ecocash", description="EcoCash osTicket agent")
     parser.add_argument("--env-file", help="path to a .env file (default: .env in the project folder)")
     parser.add_argument("-v", "--verbose", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)

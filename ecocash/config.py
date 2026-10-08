@@ -77,7 +77,7 @@ class Settings:
     legacy_failures_table: Optional[str]
     postilion_table: str
     core_extra_sql: dict
-    # The monitor (python -m agent monitor, on the integrations host)
+    # The monitor (python -m nmbz monitor, on the integrations host)
     monitor_store: str
     monitor_db_url: Optional[str]
     monitor_db_user: Optional[str]

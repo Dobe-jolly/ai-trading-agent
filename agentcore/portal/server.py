@@ -34,6 +34,7 @@ from .users import UserStore
 
 log = logging.getLogger(__name__)
 SERVED_MARKER = "<!--PORTAL-SERVED-->"
+STATIC = Path(__file__).resolve().parent / "static" / "index.html"  # the one console page, for every desk
 MAX_BODY = 64 * 1024
 AUTH_CACHE_SECONDS = 300
 LOCKOUT_FAILURES = 10
@@ -64,7 +65,7 @@ class Portal:
     server_version = "agent-portal"
     csv_name = "agent-decisions.csv"
     data: ModuleType = core_data               # the agent's read models
-    static: Optional[Path] = None              # the agent's console page
+    static: Path = STATIC                      # the console page
 
     def __init__(self, settings: Any, users: Optional[UserStore] = None) -> None:
         self.s = settings
@@ -301,12 +302,22 @@ class Portal:
             audit.close()
 
     def index_html(self) -> bytes:
-        """The console page. Its source is a body fragment (it doubles as the preview artifact), so wrap it."""
-        body = Path(self.static).read_text(encoding="utf-8")
-        return ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
-                '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
-                '<meta name="portal" content="served"></head><body>'
-                + body.replace(SERVED_MARKER, "", 1) + "</body></html>").encode("utf-8")
+        return page_html(self.static)
+
+    def export(self, path: str, params: dict[str, str]) -> tuple[str, str]:
+        """(csv text, file name) for the decisions export."""
+        if path != "/api/export/decisions.csv":
+            raise HttpError(404, "Not found.")
+        return self.export_csv(params), self.csv_name
+
+
+def page_html(static: Path) -> bytes:
+    """The console page. Its source is a body fragment (it doubles as the preview artifact), so wrap it."""
+    body = Path(static).read_text(encoding="utf-8")
+    return ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
+            '<meta name="portal" content="served"></head><body>'
+            + body.replace(SERVED_MARKER, "", 1) + "</body></html>").encode("utf-8")
 
 
 def _days(params: dict[str, str], default: int) -> int:
@@ -355,9 +366,10 @@ def make_handler(portal: Portal) -> type[BaseHTTPRequestHandler]:
                 user, role = self._user()
                 if url.path in ("/", "/index.html"):
                     return self._send(200, portal.index_html(), "text/html; charset=utf-8")
-                if url.path == "/api/export/decisions.csv":
-                    return self._send(200, portal.export_csv(params).encode("utf-8"), "text/csv; charset=utf-8",
-                                      {"Content-Disposition": f'attachment; filename="{portal.csv_name}"'})
+                if url.path.endswith("/export/decisions.csv"):
+                    text, name = portal.export(url.path, params)
+                    return self._send(200, text.encode("utf-8"), "text/csv; charset=utf-8",
+                                      {"Content-Disposition": f'attachment; filename="{name}"'})
                 return self._json(200, portal.get(url.path, params, user, role))
             except HttpError as err:
                 self._error(err)
@@ -399,7 +411,7 @@ def make_handler(portal: Portal) -> type[BaseHTTPRequestHandler]:
 def serve(settings: Any, portal_class: type[Portal] = Portal) -> None:
     portal = portal_class(settings)
     if not portal.users.users():
-        raise SystemExit(f"No portal users yet. Create one first: python -m agent portal-user add <name> --role admin\n"
+        raise SystemExit(f"No portal users yet. Create one first: python -m nmbz portal-user add <name> --role admin\n"
                          f"(users file: {settings.portal_users_file})")
     server = ThreadingHTTPServer((settings.portal_host, settings.portal_port), make_handler(portal))
     server.daemon_threads = True
