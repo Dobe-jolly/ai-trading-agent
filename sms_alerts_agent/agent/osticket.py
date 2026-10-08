@@ -1,9 +1,6 @@
 """osTicket (OSTICKETS_NEW) reads and writes through Metabase, ported from SmsAgentService."""
 from __future__ import annotations
 
-import base64
-import binascii
-import html
 import logging
 import re
 from dataclasses import dataclass, field
@@ -11,7 +8,6 @@ from datetime import date
 from typing import Any, ClassVar, Iterable, Optional
 
 from agentcore import sql
-from agentcore.metabase import MetabaseClient, MetabaseError
 from agentcore.osticket import (  # noqa: F401 - shared, re-exported for this agent's modules and tests
     ATTACHMENTS_SQL,
     OPTIONAL_TOPIC_JOINS,

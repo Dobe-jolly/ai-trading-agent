@@ -26,6 +26,7 @@ from agentcore.metabase import MetabaseClient, MetabaseError
 from ..normalize import LOCAL_ZONE, now_local, parse_timestamp
 from ..osticket import TOPIC_FILTER, TOPIC_JOINS, TOPIC_PATH
 from .features import account_facts, gateway_features
+from agentcore.anomaly.common import METRIC_SCHEMA, RECENT_HOURS, MetricCache
 
 log = logging.getLogger(__name__)
 
@@ -33,21 +34,12 @@ GATEWAY_WHERE = ("service_type = 'VALUE_ADDED_SERVICES' AND service_operation_ty
                  "AND COALESCE(service_provider_name, '') <> 'WHATSAPP-META'")
 GATEWAY_STATUS = {"DELIVERED_SUCCESSFULLY": "delivered", "FAILED_TO_SEND": "failed", "FAILED_TO_DELIVER": "failed",
                   "SENT_AWAITING_DELIVERY": "pending"}
-RECENT_HOURS = 2
 NOT_DELIVERED = {"socket_failed", "socket_not_found", "socket_pending", "socket_unknown", "sms_no_customer_email"}
-METRIC_SCHEMA = """
-CREATE TABLE IF NOT EXISTS metric_daily (
-    source TEXT NOT NULL, day TEXT NOT NULL, key TEXT NOT NULL, value REAL NOT NULL,
-    PRIMARY KEY (source, day, key)
-);
-"""
-
-
 def gateway_bucket(status: Any) -> str:
     return GATEWAY_STATUS.get(str(status or "").upper(), "other")
 
 
-class Collector:
+class Collector(MetricCache):
     def __init__(self, metabase: MetabaseClient, db: sqlite3.Connection, *, ticket_db: Optional[int],
                  socket_db: Optional[int], dispatch_db: Optional[int], standby_db: Optional[int],
                  window_hours: int = 24, baseline_days: int = 14, sample_size: int = 600,
@@ -62,28 +54,6 @@ class Collector:
         db.executescript(METRIC_SCHEMA)
 
     # ---- helpers ------------------------------------------------------------------
-    def _cached_days(self, source: str, days: list[date],
-                     fetch: Callable[[date], dict[str, float]]) -> tuple[dict[str, dict[str, float]], list[str]]:
-        """Per-day metrics for complete days, from cache or fetched (and then cached)."""
-        out: dict[str, dict[str, float]] = {}
-        errors: list[str] = []
-        for day in days:
-            key = day.isoformat()
-            rows = self.db.execute("SELECT key, value FROM metric_daily WHERE source = ? AND day = ?", (source, key)).fetchall()
-            if rows:
-                out[key] = {r[0]: r[1] for r in rows if r[0] != "__empty__"}
-                continue
-            try:
-                values = fetch(day)
-            except (MetabaseError, sql.UnsafeValue) as exc:
-                errors.append(f"{key}: {exc}")
-                continue
-            out[key] = values
-            with self.db:
-                self.db.executemany("INSERT OR REPLACE INTO metric_daily (source, day, key, value) VALUES (?, ?, ?, ?)",
-                                    [(source, key, k, v) for k, v in values.items()] or [(source, key, "__empty__", 0)])
-        return out, errors
-
     def _baseline_days(self, today: date) -> list[date]:
         return [today - timedelta(days=i) for i in range(self.baseline_days, 0, -1)]
 

@@ -3,9 +3,6 @@ closes and internal notes. Writes are literal SQL, as in the SMS agent (Metabase
 queries through executeQuery, which MySQL refuses for parameterised INSERT/UPDATE)."""
 from __future__ import annotations
 
-import base64
-import binascii
-import html
 import json
 import logging
 import re
@@ -14,7 +11,7 @@ from datetime import date
 from typing import Any, ClassVar, Iterable, Optional
 
 from agentcore import sql
-from agentcore.metabase import MetabaseClient, MetabaseError
+from agentcore.metabase import MetabaseClient
 from agentcore.osticket import (  # noqa: F401 - shared, re-exported for this agent's modules and tests
     ATTACHMENTS_SQL,
     OPTIONAL_TOPIC_JOINS,
@@ -33,7 +30,7 @@ from agentcore.osticket import (  # noqa: F401 - shared, re-exported for this ag
     topic_matches,
 )
 TOPIC_JOINS = OPTIONAL_TOPIC_JOINS  # EcoCash tickets may have no topic
-from .normalize import ACCOUNT_RE, ID_RE, MOBILE_RE, account_key, id_key, mobile_key, parse_timestamp, trim_to_none
+from .normalize import ACCOUNT_RE, ID_RE, MOBILE_RE, account_key, id_key, mobile_key, trim_to_none
 
 log = logging.getLogger(__name__)
 

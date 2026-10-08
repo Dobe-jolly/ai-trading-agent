@@ -9,8 +9,7 @@ from .attachments import render_attachment
 from .decision import SUBMIT_DECISION_TOOL
 from .normalize import today_local
 from .osticket import Ticket
-from agentcore.pii import Pseudonymizer
-from .tools import Evidence, Toolbox
+from .tools import Evidence
 
 from agentcore import loop as _core
 from agentcore.loop import AgentError, NUDGE  # noqa: F401 - re-exported

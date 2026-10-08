@@ -9,19 +9,15 @@ import statistics
 from collections import Counter
 from typing import Any, Optional
 
+from agentcore.anomaly.common import SEVERITY_RANK, _signal, incident_key  # noqa: F401 - shared
 from .features import compare
 
-SEVERITY_RANK = {"ok": 0, "watch": 1, "incident": 2}
 # The provider error text is not compared: delivered messages never carry one, so every error
 # would look "infinitely" more common among failures. It is listed separately instead.
 GATEWAY_FEATURES = ("provider", "network", "phone_format", "currency", "amount_band", "has_account", "parts",
                     "encoding", "kind", "hour_band")
 TICKET_FEATURES = ("alert_type", "account_currency", "phone_network", "email_on_file", "cob_registered",
                    "trigger_band", "event", "providers", "dispatch_lag", "branch")
-
-
-def _signal(key: str, label: str, severity: str, value: Any, usual: Any, detail: str, **extra: Any) -> dict[str, Any]:
-    return {"key": key, "label": label, "severity": severity, "value": value, "usual": usual, "detail": detail, **extra}
 
 
 def _rate(counts: dict[str, float], good: str, bad: tuple[str, ...]) -> tuple[Optional[float], float]:
@@ -187,8 +183,3 @@ def analyse(data: dict[str, Any], min_tickets: int = 5, min_sends: int = 200) ->
                     for k, v in data.items() if isinstance(v, dict) and "available" in v},
     }
 
-
-def incident_key(analysis: dict[str, Any]) -> str:
-    """Identity of what is wrong, so a continuing incident is not re-announced every hour."""
-    keys = sorted(s["key"] for s in analysis["signals"] if s["severity"] != "ok" and s["value"] is not None)
-    return "|".join(keys)

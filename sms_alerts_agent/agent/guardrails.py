@@ -11,8 +11,7 @@ findings go into an internal note for the team that owns the ticket.
 """
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from typing import Optional
 
 from .decision import ESCALATE, NO_ACTION, REPLY_ACTIONS, REPLY_AND_CLOSE, REQUEST_INFO, Decision
@@ -22,7 +21,7 @@ from agentcore.guardrails import (  # noqa: F401 - shared reply rules, re-export
     reply_problems,
 )
 from .osticket import Ticket, TicketState
-from agentcore.pii import TOKEN_RE, Pseudonymizer
+from agentcore.pii import Pseudonymizer
 from .tools import Evidence
 
 

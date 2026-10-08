@@ -7,21 +7,17 @@ from __future__ import annotations
 
 import statistics
 from collections import Counter
-from typing import Any, Optional
+from typing import Any
 
 from ..ecocash import BY_KEY
+from agentcore.anomaly.common import SEVERITY_RANK, _signal, incident_key  # noqa: F401 - shared
 from .features import compare
 
-SEVERITY_RANK = {"ok": 0, "watch": 1, "incident": 2}
 # The EcoCash error itself is listed separately: linked attempts never carry one. "via" already tells
 # USSD, branch staff and account opening apart, so the raw channel would only repeat it.
 ATTEMPT_FEATURES = ("via", "currency", "network", "mobile_format", "cif_series", "product", "id_format",
                     "hour_band")
 FAILED_KINDS = tuple(k for k in BY_KEY)  # error types, plus unknown and no_response
-
-
-def _signal(key: str, label: str, severity: str, value: Any, usual: Any, detail: str, **extra: Any) -> dict[str, Any]:
-    return {"key": key, "label": label, "severity": severity, "value": value, "usual": usual, "detail": detail, **extra}
 
 
 def _failed(counts: dict[str, float]) -> float:
@@ -138,8 +134,3 @@ def analyse(data: dict[str, Any], min_tickets: int = 5, min_attempts: int = 30) 
                     for k, v in data.items() if isinstance(v, dict) and "available" in v},
     }
 
-
-def incident_key(analysis: dict[str, Any]) -> str:
-    """Identity of what is wrong, so a continuing incident is not re-announced every hour."""
-    keys = sorted(s["key"] for s in analysis["signals"] if s["severity"] != "ok" and s["value"] is not None)
-    return "|".join(keys)

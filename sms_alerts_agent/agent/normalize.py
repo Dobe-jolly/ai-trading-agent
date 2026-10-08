@@ -8,7 +8,7 @@ Two phone normalisers exist on purpose, as in the Java:
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 

@@ -8,18 +8,17 @@ from __future__ import annotations
 
 import json
 import re
-from collections import Counter
 from typing import Any, Iterable, Optional
 
 from ..normalize import (
     ACCOUNT_SUFFIX_PATTERN,
     AMOUNT_PATTERN,
-    LOCAL_ZONE,
     normalize_currency,
     normalize_gateway_phone,
     parse_timestamp,
     to_decimal,
 )
+from agentcore.anomaly.common import compare as _compare, hour_band as _hour_band, values_of as _values  # noqa: F401
 
 # GSM 03.38 basic character set (plus the extension table). Anything else forces UCS-2,
 # which halves the SMS length and is rejected by some routes.
@@ -97,14 +96,6 @@ def _amount_band(amount: Any) -> str:
     if value < 1000:
         return "100–999"
     return "1,000+"
-
-
-def _hour_band(ts: Any) -> str:
-    parsed = parse_timestamp(ts)
-    if parsed is None:
-        return "unknown"
-    hour = parsed.astimezone(LOCAL_ZONE).hour
-    return ("00–05", "06–11", "12–17", "18–23")[hour // 6]
 
 
 def _message_text(payload: str) -> Optional[str]:
@@ -208,40 +199,5 @@ def _ddmmyyyy(value: Any) -> Any:
 
 def compare(failed: Iterable[dict[str, Any]], ok: Iterable[dict[str, Any]], features: Iterable[str],
             min_failed: int = 5, min_ratio: float = 1.8) -> list[dict[str, Any]]:
-    """For each feature value: its share among failures vs among successes. Values much more
-    common among failures (ratio >= min_ratio, with enough failures behind them) are findings.
-    Samples may be drawn separately; shares within each sample are still comparable."""
-    failed, ok = list(failed), list(ok)
-    if not failed or not ok:
-        return []
-    findings = []
-    for feature in features:
-        f_counts: Counter = Counter()
-        o_counts: Counter = Counter()
-        for row in failed:
-            for value in _values(row.get(feature)):
-                f_counts[value] += 1
-        for row in ok:
-            for value in _values(row.get(feature)):
-                o_counts[value] += 1
-        for value, n_failed in f_counts.items():
-            failed_share = n_failed / len(failed)
-            ok_share = o_counts.get(value, 0) / len(ok)
-            # Smoothed (add-one) shares for the ratio, so a value that happens to be absent from a
-            # small set of deliveries does not get an infinite ratio and outrank real patterns.
-            ratio = ((n_failed + 1) / (len(failed) + 2)) / ((o_counts.get(value, 0) + 1) / (len(ok) + 2))
-            if n_failed >= max(min_failed, 0.05 * len(failed)) and ratio >= min_ratio:
-                findings.append({
-                    "feature": feature, "label": FEATURE_LABELS.get(feature, feature), "value": value,
-                    "failed_share": round(failed_share, 3), "ok_share": round(ok_share, 3),
-                    "ratio": round(ratio, 1), "failed_n": n_failed, "ok_n": o_counts.get(value, 0),
-                })
-    # Strongest first: share of failures it explains, weighted by how distinctive it is.
-    findings.sort(key=lambda f: f["failed_share"] * min(f["ratio"], 50.0), reverse=True)
-    return findings[:12]
-
-
-def _values(value: Any) -> list[str]:
-    if isinstance(value, (list, tuple, set)):
-        return [str(v) for v in value] or ["none"]
-    return [str(value if value is not None else "unknown")]
+    """Feature values much more common among failures than successes (agentcore.anomaly.common.compare)."""
+    return _compare(failed, ok, features, min_failed, min_ratio, labels=FEATURE_LABELS)

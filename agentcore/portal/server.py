@@ -16,7 +16,6 @@ import re
 import sqlite3
 import threading
 import time
-from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Optional

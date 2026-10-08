@@ -23,7 +23,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
 
-from .decision import REPLY_ACTIONS, REPLY_AND_CLOSE, REQUEST_INFO, Decision
+from .decision import REPLY_ACTIONS, Decision
 
 MODES = ("off", "unscripted", "all")
 OPEN_STATES = ("pending", "approved", "rejected")

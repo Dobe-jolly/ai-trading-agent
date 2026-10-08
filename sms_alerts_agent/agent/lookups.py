@@ -36,7 +36,6 @@ from .sms_checks import (
     ACNTS_CURRENCY_SQL,
     ACNTS_SMS_SQL,
     COBICADDR_SQL,
-    INDCLIENT_EMAIL_SQL,
     Databases,
     SmsChecks,
     _first,

@@ -6,8 +6,7 @@ attempt that belongs to the client on the ticket and whose outcome the branch or
 """
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from typing import Optional
 
 from datetime import timedelta
@@ -21,7 +20,7 @@ from agentcore.guardrails import (  # noqa: F401 - shared reply rules, re-export
 from .ecocash import CLOSABLE
 from .normalize import account_key, id_key, mobile_key, parse_timestamp
 from .osticket import Ticket, TicketState
-from agentcore.pii import TOKEN_RE, Pseudonymizer
+from agentcore.pii import Pseudonymizer
 from .tools import Evidence
 
 
