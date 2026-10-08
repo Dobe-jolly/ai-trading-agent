@@ -11,7 +11,7 @@ a request for information or an escalation; the desk's guardrails decide what ac
 | `ecocash` | EcoCash linking | Every link and delink attempt (recorded by the EcoCash monitor), EcoCash's answer, the Postilion link record | [docs/ecocash.md](docs/ecocash.md) |
 | `failed_txn` | Failed ZIPIT, EcoCash B2W/W2B, NMB Connect, airtime, ZESA and Postilion transactions | The transaction in Postilion, NMB Connect and the billers, or internet banking; then the debit and any refund in core banking | [docs/failed_txn.md](docs/failed_txn.md) |
 
-Every desk runs in the same pass, writes to osTicket the same way, and shows in the same console.
+Every desk runs in the same pass, writes to osTicket the same way, and shows in the same console. How this maps onto the earlier on-prem plan, and what is left of it, is in [docs/architecture.md](docs/architecture.md).
 
 ```
 every 15 min ─► python -m nmbz run ─► SMS Alerts ─► EcoCash ─► Failed transactions ─► …   (DESKS, in order)
@@ -34,6 +34,7 @@ python -m nmbz portal ─► one console: a tab per desk, approvals, anomalies, 
 | `nmbz/` | The service: the command line (`python -m nmbz`), the desk list, the console server |
 | `tests/` | `core/` and one folder per desk (invented data only) |
 | `tools/build_preview.py` | Builds `preview.html`: the console with every desk's demo data (`tools/demo_<desk>.py`) |
+| `docs/` | One page per desk, and the architecture against the earlier plan |
 | `deploy/` | systemd units and the monitor's env file |
 | `state/` | Decision logs, pause files, console users (one folder per desk) |
 
@@ -74,6 +75,21 @@ ECOCASH_AGENT_MODE=live       # ...except EcoCash, which acts
 Prefixes: `SMS_ALERTS_`, `ECOCASH_`, `FAILED_TXN_`. Each desk keeps its own decision log, pause file and mode hold under
 `state/<desk>/`; console users (`state/portal_users.json`) are shared. `DESKS` picks which desks a pass visits
 and in what order. `python -m nmbz desks` shows each desk's mode and log.
+
+## Claude and the bank's data
+
+Claude is approved for use across the bank (October 2026). What it gets, on every desk:
+
+- **Masked text.** The ticket, the thread and every lookup result, with account numbers, references, mobiles,
+  national IDs and e-mail addresses replaced by tokens (`<NUMBER_1>`, `<MOBILE_1>`). Lookups run on the server with
+  the real values; replies get them back before they are posted.
+- **Attachments**, with `ATTACHMENT_MODE=model`: text files masked like the thread; images and PDFs as they are, in a
+  separate call that returns facts only. `local` keeps images and PDFs on the server.
+- **Nothing else.** No database access, no SQL, no credentials: Claude can only call the desk's lookups, and only
+  with values from the ticket.
+
+The decision log and the console hold masked text only. The agent host needs outbound HTTPS to `api.anthropic.com`;
+for the bank's proxy, see the Claude section of [.env.example](.env.example).
 
 ## Commands
 

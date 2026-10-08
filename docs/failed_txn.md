@@ -168,6 +168,19 @@ The Java engine's failed-transaction rules only escalated, and read Postilion in
 - **Core banking.** Nothing checked whether the client was actually debited. Now every close of a failed
   transaction stands on core banking showing no debit, or a refund.
 
+## Privacy
+
+- Account numbers, references, mobile numbers, national IDs and e-mail addresses are masked before anything reaches
+  Claude. Lookups use the real values on the server and mask their results again. Amounts and dates stay readable:
+  the agent needs them to pick the transaction.
+- Replies and notes get the real values back before they are posted, so the branch and Operations see real numbers.
+- With `ATTACHMENT_MODE=model`, images and PDFs (screenshots of the client's message, statements) go to Claude as
+  they are, in a separate call that only returns facts. `local` keeps them on the server.
+- The decision log stores masked text only, and the e-mail outbox erases message bodies once they are sent.
+
+Claude is approved for use across the bank (October 2026); the masking is kept because the agent doesn't need the
+numbers to decide.
+
 ## Commands
 
 ```bash

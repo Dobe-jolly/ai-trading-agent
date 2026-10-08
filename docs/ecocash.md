@@ -178,7 +178,7 @@ python -m nmbz --desk ecocash attachments --ticket 482913          # what the ag
 - The decision log stores masked text only, and the e-mail outbox erases message bodies once they are sent.
 - The monitor stores what the Java stored (mobile, account, ID, names) plus the EcoCash name and transaction ID, in the same database. It doesn't store the IMEI, location or access token, which the registration service logs.
 
-Sending ticket content to the Claude API needs your IT/risk sign-off, as for the SMS agent.
+Claude is approved for use across the bank (October 2026). The masking stays: the agent doesn't need the numbers to decide, and the log and the console hold none.
 
 ## Install
 

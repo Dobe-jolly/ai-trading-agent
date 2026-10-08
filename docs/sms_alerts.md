@@ -111,7 +111,7 @@ Before anything reaches Claude, mobile numbers, account and other long numbers, 
 - **The audit log** stores only masked text.
 - **Attachments:** text-type files are read on the server and masked like the thread. Images and PDFs can't be masked, so in `ATTACHMENT_MODE=model` each one goes to Claude as it is, in a separate call that only returns facts. The deciding agent and the log only get those facts, masked. `ATTACHMENT_MODE=local` keeps images and PDFs on the server.
 
-Names in free text are **not** masked. Sending ticket content to the Claude API needs your IT/risk sign-off.
+Names in free text are **not** masked. Claude is approved for use across the bank (October 2026), so the masking is not a condition of using it: the agent masks numbers because it doesn't need them to decide, and so the log and the console hold none.
 
 ## Checking the setup
 
