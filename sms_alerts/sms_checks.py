@@ -7,7 +7,6 @@ with what the Java agent posts today.
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, Optional
@@ -88,7 +87,7 @@ JOIN COBICINIT I ON I.COBICINIT_CIF_NO = TO_CHAR(AC.ACNTS_CLIENT_NUM)
 JOIN COBICADDR A ON A.COBICADDR_CREF_NO = I.COBICINIT_CREF_NO
 WHERE AC.ACNTS_INTERNAL_ACNUM = '{internal_acnum}'"""
 
-TRAN_PATTERN_RE = re.compile(r"[A-Za-z0-9_$#]+\.[A-Za-z0-9_$#]*\{year\}[A-Za-z0-9_$#]*")
+TRAN_PATTERN_RE = sql.TRAN_PATTERN_RE
 
 # Rows of standby triggers echoed back to the model (the socket check uses all of them).
 MAX_TRIGGERS_SHOWN = 8

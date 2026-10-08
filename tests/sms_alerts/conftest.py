@@ -357,6 +357,8 @@ class FakeMetabase:
             return [{"REQ_STATUS": k, "N": v} for k, v in self.cae_daily.get(day, {}).items()]
         if "NMBPRODCAE" in sql or "COBICADDR a" in sql:
             return []
+        if sql.startswith("SELECT 1 AS ok FROM ") and "ROWNUM <= 1" in sql:  # the check command's probe
+            return [{"OK": 1}]
         raise AssertionError(f"unrouted standby SQL: {sql[:80]}")
 
     def _socket_query(self, sql: str) -> list[dict[str, Any]]:

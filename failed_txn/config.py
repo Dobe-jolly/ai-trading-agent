@@ -13,6 +13,7 @@ from typing import Optional, Union
 from dotenv import load_dotenv
 
 from agentcore.config import Env
+from agentcore.sql import TRAN_PATTERN_RE
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DESK = "failed_txn"
@@ -251,8 +252,8 @@ class Settings:
             errors.append("CONFIDENCE_THRESHOLD must be between 0 and 1")
         if not self.topics:
             errors.append("FAILED_TXN_HELP_TOPICS is empty")
-        if "{year}" not in self.tran_table_pattern:
-            errors.append("TRAN_TABLE_PATTERN must contain {year}")
+        if not TRAN_PATTERN_RE.fullmatch(self.tran_table_pattern):
+            errors.append("TRAN_TABLE_PATTERN must be schema.table with {year}, e.g. NMBPRODIDC.TRAN{year}")
         if self.notify_transport not in ("off", "gateway", "smtp"):
             errors.append(f"NOTIFY_TRANSPORT must be off, gateway or smtp, got {self.notify_transport!r}")
         if self.notify_transport == "gateway" and not self.notif_email_url:

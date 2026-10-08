@@ -18,6 +18,8 @@ from datetime import date, datetime
 from typing import Any
 
 _DIGITS = re.compile(r"^\d{1,32}$")
+# A yearly core-banking table name, e.g. NMBPRODIDC.TRAN{year}: schema.table, nothing else (it goes into SQL as is)
+TRAN_PATTERN_RE = re.compile(r"[A-Za-z0-9_$#]+\.[A-Za-z0-9_$#]*\{year\}[A-Za-z0-9_$#]*")
 
 
 class UnsafeValue(ValueError):

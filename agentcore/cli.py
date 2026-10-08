@@ -1,7 +1,7 @@
 """Commands every desk has, written once. A desk subclasses DeskCli with its builders and its own commands.
 
     python -m nmbz --desk <desk> run | check | audit | compare | report | attachments | notify-test | notify-retry
-                                 | portal | portal-user
+                                 | portal | portal-user | anomalies (desks with an anomaly watch)
 """
 from __future__ import annotations
 
@@ -55,9 +55,21 @@ class DeskCli:
     def render_attachment(self, item: Any) -> str:
         raise NotImplementedError
 
-    def check(self, s: Any, args: argparse.Namespace) -> int:
-        """Desk-specific connectivity checks after the settings check; return 0 when all is well."""
-        return 0
+    def describe(self, s: Any) -> list[str]:
+        """Lines `check` prints about the desk's settings (which tickets it takes, ...)."""
+        return []
+
+    def check(self, s: Any, mb: MetabaseClient) -> bool:
+        """The desk's databases and tickets, printed as `[label] ...` lines; False when something required fails.
+        Runs only with METABASE_API_KEY set. A MetabaseError raised here is printed and counts as a failure."""
+        return True
+
+    # The anomaly watch, for desks that have one (anomaly_noun set): the hourly service and how its comparisons
+    # word the good side ("delivered", "deliveries" for SMS; "linked", "links" for EcoCash).
+    anomaly_noun: Optional[tuple[str, str]] = None
+
+    def build_anomaly_service(self, s: Any, mb: MetabaseClient, audit: AuditLog, client: Any, notifier: Any) -> Any:
+        raise NotImplementedError
 
     def add_commands(self, sub: Any) -> dict[str, Callable[[Any, argparse.Namespace], int]]:
         """Extra subcommands: add parsers to sub and return {name: handler}."""
@@ -88,6 +100,18 @@ class DeskCli:
         return handle
 
     @staticmethod
+    def check_databases(mb: MetabaseClient, databases: list[tuple[str, str, bool]]) -> tuple[bool, dict[str, Any]]:
+        """Resolve (label, Metabase name, required) and print each; (all required found, {label: id or None})."""
+        ok, found = True, {}
+        for label, name, required in databases:
+            db_id = mb.try_resolve(name)
+            found[label] = db_id
+            note = "" if db_id is not None or required else " (optional: its lookups are off)"
+            print(f"[metabase] {label:9} '{name}': {db_id if db_id is not None else 'NOT FOUND'}{note}")
+            ok &= db_id is not None or not required
+        return ok, found
+
+    @staticmethod
     def load_prompt(s: Any, **values: Any) -> str:
         text = s.prompt_file.read_text(encoding="utf-8")
         text = re.sub(r"<!--.*?-->\s*", "", text, flags=re.S)
@@ -99,25 +123,38 @@ class DeskCli:
     def cmd_check(self, s: Any, args: argparse.Namespace) -> int:
         ok = True
         for problem in s.problems(args.mode):
-            print(f"[FAIL] {problem}")
+            print(f"[config] {problem}")
             ok = False
         for warning in s.warnings(args.mode):
-            print(f"[WARN] {warning}")
-        if not ok:
-            return 1
-        code = self.check(s, args)
-        if code == 0 and args.ping_model:
+            print(f"[warning] {warning}")
+        print(f"[notify] branch emails: {s.notify_transport}"
+              + (f" on {', '.join(sorted(s.notify_on))}" if s.notify_transport != "off" else ""))
+        print(f"[attachments] {s.attachment_mode}: " + {
+            "model": "text files read here; images and PDFs read by the model",
+            "local": "text files read here; images and PDFs listed only", "off": "ignored"}.get(s.attachment_mode, "?"))
+        for line in self.describe(s):
+            print(line)
+        if s.metabase_api_key:
+            mb = self.build_metabase(s)
             try:
-                import anthropic
+                ok &= bool(self.check(s, mb))
+            except MetabaseError as exc:
+                print(f"[metabase] {exc}")
+                ok = False
+            finally:
+                mb.close()
+        if args.ping_model and s.anthropic_api_key:
+            import anthropic
 
-                client = anthropic.Anthropic(api_key=s.anthropic_api_key, max_retries=1)
-                client.messages.create(model=s.model, max_tokens=5, messages=[{"role": "user", "content": "ping"}])
-                print(f"[ OK ] Claude answers ({s.model})")
-            except Exception as exc:  # noqa: BLE001
-                print(f"[FAIL] Claude: {exc}")
-                code = 1
-        print("All good." if code == 0 else "Fix the items above.")
-        return code
+            try:
+                reply = anthropic.Anthropic(api_key=s.anthropic_api_key, max_retries=1).messages.create(
+                    model=s.model, max_tokens=5, messages=[{"role": "user", "content": "Reply with OK"}])
+                print(f"[model] OK: {s.model} answered ({reply.usage.output_tokens} tokens)")
+            except anthropic.APIError as exc:
+                print(f"[model] {type(exc).__name__}: {exc}")
+                ok = False
+        print("All good." if ok else "Fix the items above.")
+        return 0 if ok else 1
 
     def cmd_run(self, s: Any, args: argparse.Namespace) -> int:
         configured = args.mode or s.mode
@@ -296,6 +333,47 @@ class DeskCli:
         print(f"Re-queued {reset} failed email(s); sent now: {counts}")
         return 0
 
+    def cmd_anomalies(self, s: Any, args: argparse.Namespace) -> int:
+        """Run the anomaly watch now and print what it found."""
+        notify = self.notify_module()
+        ok_word, ok_plural = self.anomaly_noun or ("ok", "successes")
+        mb = self.build_metabase(s)
+        audit = AuditLog(s.state_db)
+        notifier = notify.Notifier(audit, s, notify.build_transport(s), notify.build_sms_transport(s))
+        try:
+            client = None
+            if s.anthropic_api_key and not args.no_model:
+                import anthropic
+
+                client = anthropic.Anthropic(api_key=s.anthropic_api_key, max_retries=2)
+            service = self.build_anomaly_service(s, mb, audit, client, notifier)
+            report = service.run(alert=args.alert, use_model=not args.no_model)
+        except MetabaseError as exc:
+            print(f"Metabase error: {exc}")
+            return 2
+        finally:
+            notifier.close()
+            audit.close()
+            mb.close()
+        summary, analysis = report["summary"], report["analysis"]
+        print(f"{report['severity'].upper()}: {summary['headline']}\n")
+        print(summary["summary"] + "\n")
+        for sig in analysis["signals"]:
+            print(f"  [{sig['severity']:8}] {sig['label']}: {sig['value']} (usual {sig['usual']}) - {sig['detail']}")
+        for source, comp in analysis["comparisons"].items():
+            if comp["findings"]:
+                print(f"\nWhat is different about failing {source} ({comp['failed_n']} failed vs "
+                      f"{comp[ok_word + '_n']} {ok_word}):")
+                for f in comp["findings"][:6]:
+                    print(f"  {f['label']} = {f['value']}: {f['failed_share']:.0%} of failures vs "
+                          f"{f['ok_share']:.0%} of {ok_plural}")
+        for name, src in analysis["sources"].items():
+            if not src["available"]:
+                print(f"\n  (could not read {name}: {src['error']})")
+        if report.get("alert"):
+            print(f"\nAdmin alert: {report['alert']}")
+        return 0
+
     def cmd_portal(self, s: Any, args: argparse.Namespace) -> int:
         """The console serves every desk (python -m nmbz portal); started from here it is the same console."""
         from nmbz.console import serve
@@ -361,6 +439,11 @@ class DeskCli:
         p.add_argument("--local", action="store_true", help="read text-type files only; send nothing to the model")
         p.add_argument("--unmasked", action="store_true", help="print customer numbers as read (not masked)")
 
+        if self.anomaly_noun:
+            p = sub.add_parser("anomalies", help="run the anomaly watch now and print the findings")
+            p.add_argument("--alert", action="store_true", help="also alert the admins if this is an incident")
+            p.add_argument("--no-model", action="store_true", help="plain summary, no model call")
+
         p = sub.add_parser("notify-test", help="send one sample branch email through the configured transport")
         p.add_argument("--to", required=True)
         sub.add_parser("notify-retry", help="re-send branch emails that failed")
@@ -369,7 +452,7 @@ class DeskCli:
         p = sub.add_parser("audit", help="replay closed tickets and compare with what was posted (no writes)")
         p.add_argument("--since", default=week_ago, help="closed on/after this date (YYYY-MM-DD)")
         p.add_argument("--limit", type=int, default=50, help="max tickets (each one costs model calls)")
-        p.add_argument("--window-today", action="store_true", help="look-ups end today, not at the close date")
+        p.add_argument("--window-today", action="store_true", help="lookups end today, not at the close date")
         p.add_argument("--out-dir", default=str(self.base_dir / "reports"))
 
         p = sub.add_parser("compare", help="shadow decisions vs what actually happened")
@@ -385,6 +468,8 @@ class DeskCli:
                     "compare": self.cmd_compare, "portal": self.cmd_portal, "portal-user": self.cmd_portal_user,
                     "notify-test": self.cmd_notify_test, "notify-retry": self.cmd_notify_retry,
                     "attachments": self.cmd_attachments}
+        if self.anomaly_noun:
+            commands["anomalies"] = self.cmd_anomalies
         commands.update(self.add_commands(sub))
         return parser, commands
 
@@ -393,7 +478,7 @@ class DeskCli:
         args = parser.parse_args(argv)
         logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                             format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-        for noisy in ("httpx", "httpcore", "anthropic"):
+        for noisy in ("httpx", "httpx2", "httpcore", "anthropic"):
             logging.getLogger(noisy).setLevel(logging.WARNING)
         settings = self.settings_cls.from_env(args.env_file)
         return commands[args.command](settings, args)

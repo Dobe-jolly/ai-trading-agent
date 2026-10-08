@@ -184,6 +184,8 @@ class FakeMetabase(_TicketFake):
                 and (band is None or band[0] <= float(r["transaction_value"]) <= band[1])]
 
     def _core(self, sql: str) -> list[dict[str, Any]]:
+        if "ROWNUM <= 1" in sql and "IACLINK" not in sql:  # the check command: is the TRAN table readable
+            return [{"OK": 1}]
         acct = account_key(re.search(r"IACLINK_ACTUAL_ACNUM = '(\d+)'", sql).group(1))
         if "ACNTS_CURR_CODE" in sql and "TRAN_DATE_OF_TRAN" not in sql:
             data = self.core_accounts.get(acct.zfill(14)) or self.core_accounts.get(acct)

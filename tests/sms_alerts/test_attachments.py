@@ -285,7 +285,7 @@ def test_portal_and_cli_show_what_was_read(settings, mb, monkeypatch, capsys):
     assert "<NUMBER_1> | <MOBILE_1>" in detail["attachments"][0]["summary"]
 
     mb.close = lambda: None
-    monkeypatch.setattr(cli, "build_metabase", lambda s: mb)
+    monkeypatch.setattr(cli.CLI, "build_metabase", lambda s: mb)
     assert cli.main(["attachments", "--ticket", "482913", "--local"]) == 0
     out = capsys.readouterr().out
     assert "[Attachment 1: accounts.csv, text/csv" in out and "<NUMBER_1> | <MOBILE_1>" in out

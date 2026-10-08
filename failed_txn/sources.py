@@ -423,6 +423,8 @@ ORDER BY S.TRAN_DATE_OF_TRAN DESC"""
 
 class CoreBanking:
     def __init__(self, mb: MetabaseClient, db: int, tran_pattern: str = "NMBPRODIDC.TRAN{year}", limit: int = 60) -> None:
+        if not sql.TRAN_PATTERN_RE.fullmatch(tran_pattern):
+            raise ValueError(f"TRAN table pattern must be schema.table with {{year}}: {tran_pattern!r}")
         self.mb, self.db, self.tran_pattern, self.limit = mb, db, tran_pattern, limit
 
     def account(self, account: str) -> dict[str, Any]:

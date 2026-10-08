@@ -26,12 +26,16 @@ def test_check_counts_tickets_per_topic_and_names_quiet_topics(settings, capsys)
     mb.add_ticket(1, "200001", ["acc 86000013101001 ZIPIT failed"])
     mb.add_ticket(2, "200002", ["acc 86000013101001 ZIPIT failed"])
     mb.add_ticket(3, "200003", ["acc 86000013101001 ZESA"], topic="FAILED ZESA")
-    assert Cli(mb).check(settings, argparse.Namespace()) == 0
+    assert Cli(mb).cmd_check(settings, argparse.Namespace(mode=None, ping_model=False)) == 0
     out = capsys.readouterr().out
-    assert "[WARN] Metabase database 'IB' not found" in out and "3 open failed-transaction ticket(s)" in out
-    assert "   2  Failed ZIPIT Transaction" in out and "   1  FAILED ZESA" in out
-    assert "no open tickets under:" in out and "FAILED AIRTIME PURCHASE" in out
-    assert "Failed ZIPIT Transaction," not in out.split("no open tickets under:")[1]
+    assert "[metabase] ib        'IB': NOT FOUND (optional: its lookups are off)" in out
+    assert "[osticket] 3 open failed-transaction ticket(s)" in out
+    assert "[osticket]     2  Failed ZIPIT Transaction" in out and "[osticket]     1  FAILED ZESA" in out
+    quiet = out.split("no open tickets under:")[1].splitlines()[0]
+    assert "FAILED AIRTIME PURCHASE" in quiet and "Failed ZIPIT Transaction" not in quiet
+    assert "[standby] NMBPRODIDC.TRAN" in out and out.rstrip().endswith("All good.")
+    mb.try_resolve = lambda name: None
+    assert Cli(mb).cmd_check(settings, argparse.Namespace(mode=None, ping_model=False)) == 1
 
 
 def test_find_transactions_prints_every_source_with_real_values(settings, capsys):
