@@ -1,6 +1,0 @@
-anthropic>=0.40
-httpx>=0.27
-python-dotenv>=1.0
-tzdata; platform_system == "Windows"
-# Attachments: shrinks photos and converts BMP/TIFF before the model reads them (optional; add pillow-heif for iPhone HEIC)
-Pillow>=10
