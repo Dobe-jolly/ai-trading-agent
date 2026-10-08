@@ -4,7 +4,7 @@ from __future__ import annotations
 import io
 import json
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import pytest
 

@@ -7,8 +7,7 @@ import zipfile
 from types import SimpleNamespace
 
 from ecocash.attachments import AttachmentReader, facts_summary, xlsx_text
-from ecocash.osticket import OsTicket
-from tests.ecocash.conftest import AGENT_STAFF, TICKET_DB, ScriptedModel, decision, find
+from tests.ecocash.conftest import AGENT_STAFF, ScriptedModel, decision, find
 from tests.ecocash.test_runner import build
 
 try:

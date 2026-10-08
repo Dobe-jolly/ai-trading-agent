@@ -6,7 +6,6 @@ DB_USERNAME and DB_PASSWORD, so its existing env file keeps working.
 """
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,50 +13,22 @@ from typing import Optional, Union
 
 from dotenv import load_dotenv
 
+from agentcore.config import Env
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+DESK = "ecocash"
+PREFIX = "ECOCASH"  # ECOCASH_<SETTING> overrides <SETTING> for this desk
 VALID_MODES = ("shadow", "notes", "live")
 VALID_REPLY_SOURCES = ("model", "template")
 
 
-def _str(name: str, default: Optional[str] = None) -> Optional[str]:
-    value = os.getenv(name)
-    if value is None or value.strip() == "":
-        return default
-    return value.strip()
-
-
-def _int(name: str, default: Optional[int]) -> Optional[int]:
-    value = _str(name)
-    if value is None:
-        return default
-    try:
-        return int(value)
-    except ValueError:
-        raise ValueError(f"{name} must be a whole number, got {value!r}") from None
-
-
-def _float(name: str, default: float) -> float:
-    value = _str(name)
-    try:
-        return float(value) if value is not None else default
-    except ValueError:
-        raise ValueError(f"{name} must be a number, got {value!r}") from None
-
-
-def _bool(name: str, default: bool) -> bool:
-    value = _str(name)
-    if value is None:
-        return default
-    return value.lower() in ("true", "1", "yes", "on")
+_DEFAULT = Env(None, BASE_DIR)
+_str, _int, _float, _bool, _names, _path = (
+    _DEFAULT.str, _DEFAULT.int, _DEFAULT.float, _DEFAULT.bool, _DEFAULT.names, _DEFAULT.path)
 
 
 def _list(name: str, default: str) -> list:
-    return [x.strip() for x in (_str(name, default) or "").split(",") if x.strip()]
-
-
-def _path(name: str, default: str) -> Path:
-    path = Path(_str(name, default) or default)
-    return path if path.is_absolute() else BASE_DIR / path
+    return list(_names(name, default))
 
 
 @dataclass(frozen=True)
@@ -175,8 +146,11 @@ class Settings:
     pending_changes_sql: Optional[str] = None
 
     @classmethod
-    def from_env(cls, env_file: Union[str, Path, None] = None) -> "Settings":
+    def from_env(cls, env_file: Union[str, Path, None] = None, prefix: Optional[str] = PREFIX) -> "Settings":
         load_dotenv(env_file or BASE_DIR / ".env", override=False)
+        env = Env(prefix, BASE_DIR)
+        _str, _int, _float, _bool, _names, _path = env.str, env.int, env.float, env.bool, env.names, env.path
+        _list = lambda name, default: list(_names(name, default))  # noqa: E731
         ca_bundle = _str("METABASE_CA_BUNDLE")
         return cls(
             anthropic_api_key=_str("ANTHROPIC_API_KEY"),

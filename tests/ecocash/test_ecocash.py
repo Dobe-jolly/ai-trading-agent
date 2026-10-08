@@ -9,7 +9,7 @@ import pytest
 from ecocash.decision import ESCALATE, NO_ACTION, REPLY_AND_CLOSE, REQUEST_INFO, Decision
 from ecocash.ecocash import CLOSABLE, ESCALATING, AttemptStore, BankAccounts, LinkRecords, classify, clean_message, classify_sql
 from ecocash.guardrails import apply_guardrails
-from ecocash.normalize import LOCAL_ZONE, account_key, id_key, international_mobile, mobile_key, network_of, now_local
+from ecocash.normalize import account_key, id_key, international_mobile, mobile_key, network_of, now_local
 from ecocash.osticket import OsTicket, TicketState, field_value, find_identifiers, tickets_sql
 from agentcore.pii import Pseudonymizer
 from ecocash.tools import Evidence, Toolbox, standard_reply

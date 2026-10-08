@@ -10,11 +10,9 @@ import pytest
 from sms_alerts.approval import ApprovalStore
 from sms_alerts.lookups import Lookups, message_facts, parse_range
 from sms_alerts.osticket import ESCALATION_NOTE_MARKER
-from agentcore.pii import Pseudonymizer
 from sms_alerts.portal import data
 from sms_alerts.portal.server import HttpError, Portal
 from agentcore.portal.users import UserStore
-from sms_alerts.tools import Evidence
 from tests.sms_alerts.conftest import ScriptedModel, check, decision, response, tool_block
 from tests.sms_alerts.test_agent_runner import ACCT, CLOSE_REPLY, build, seed
 from tests.sms_alerts.test_notify import RecordingTransport

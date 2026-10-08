@@ -14,7 +14,7 @@ from ecocash.osticket import ESCALATION_NOTE_MARKER, OsTicket
 from ecocash.runner import Runner
 from ecocash.tools import Toolbox
 from agentcore.writer import OsTicketWriter, ShadowWriter
-from tests.ecocash.conftest import (ACCOUNT, AGENT_STAFF, ECOCASH_DB, MOBILE, POSTILION_DB, STANDBY_DB, TICKET_DB,
+from tests.ecocash.conftest import (ACCOUNT, AGENT_STAFF, ECOCASH_DB, POSTILION_DB, STANDBY_DB, TICKET_DB,
                             ScriptedModel, decision, find, response, tool_block)
 
 
