@@ -137,6 +137,8 @@ h3 { font-size: .92rem; font-weight: 650; }
 .f-failed { fill: var(--crit); background: var(--crit); }
 .f-never { fill: color-mix(in srgb, var(--crit) 55%, var(--ink)); background: color-mix(in srgb, var(--crit) 55%, var(--ink)); }
 .f-unknown { fill: var(--idle); background: var(--idle); }
+.f-ok2 { fill: color-mix(in srgb, var(--ok) 55%, var(--ink)); background: color-mix(in srgb, var(--ok) 55%, var(--ink)); }
+.f-info { fill: var(--accent); background: var(--accent); }
 .hops { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .74rem; color: var(--ink-3); margin-top: 8px; }
 .hops span { border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font-family: var(--font-mono); font-size: .7rem; color: var(--ink-2); }
 
@@ -752,6 +754,7 @@ const groupReports = history => {
 PAGES.anomalies = async () => {
   const res = await apiGet(S.id ? `/api/anomalies/${encodeURIComponent(S.id)}` : "/api/anomalies");
   const r = res.report;
+  if (!r && V.anomaly && V.anomaly.unavailable) return `<div class="head"><div><h1>Anomalies</h1><p>${esc(V.anomaly.unavailable)}</p></div></div>`;
   if (!r) return `<div class="head"><div><h1>Anomalies</h1><p>The anomaly watch has not run yet. It runs inside the agent's passes once an hour, or on demand with <span class="mono">python -m nmbz anomalies --desk ${esc(DESK)}</span>.</p></div></div>`;
   const sm = r.summary || {}, an = r.analysis || {}, d = r.data || {};
   const signals = (an.signals || []).filter(x => x.value != null || x.severity !== "ok");

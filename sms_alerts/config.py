@@ -19,6 +19,8 @@ DESK = "sms_alerts"
 PREFIX = "SMS_ALERTS"  # SMS_ALERTS_<SETTING> overrides <SETTING> for this desk
 VALID_MODES = ("shadow", "notes", "live")
 VALID_REPLY_SOURCES = ("model", "template")
+# Topics other desks own: never read by the SMS Alerts desk
+FAILED_TXN_TOPICS = ("Failed ZIPIT Transaction,Ecocash / Failed Transactions,FAILED ECOCASH B2W / WB2,NMB Connect / Failed Transaction,FAILED AIRTIME PURCHASE,FAILED ZESA,Postilion transactions,NMB Connect / USSD / Failed Transactions")
 
 
 _DEFAULT = Env(None, BASE_DIR)
@@ -244,7 +246,7 @@ class Settings:
             attachment_max_text_chars=max(300, _int("ATTACHMENT_MAX_TEXT_CHARS", 2500) or 2500),
             sms_topics=_names("SMS_HELP_TOPICS", "SMS Alerts"),
             scan_other_topics=_bool("SCAN_OTHER_TOPICS", True),
-            exclude_topics=_names("EXCLUDE_TOPICS", "EcoCash"),
+            exclude_topics=_names("EXCLUDE_TOPICS", "EcoCash," + FAILED_TXN_TOPICS),
             scan_days=max(1, _int("SCAN_OTHER_TOPICS_DAYS", 30) or 30),
             triage_model=_str("TRIAGE_MODEL"),
             triage_max_per_run=max(0, _int("TRIAGE_MAX_PER_RUN", 40) or 0),

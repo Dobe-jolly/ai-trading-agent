@@ -39,8 +39,11 @@ ALL = {
                        "Clients not receiving SMS alerts: checks registration, the CAE request and the gateway."),
     "ecocash": Desk("ecocash", "EcoCash", "ECOCASH", ("lookup", "monitor"),
                     "EcoCash account linking: reads the link attempts the monitor records and EcoCash's answer."),
+    "failed_txn": Desk("failed_txn", "Failed transactions", "FAILED_TXN", ("find-transactions",),
+                       "ZIPIT, B2W/W2B, card, NMB Connect, airtime and bill payments: the switch, the billers and "
+                       "core banking."),
 }
-DEFAULT_ORDER = "sms_alerts,ecocash"
+DEFAULT_ORDER = "sms_alerts,ecocash,failed_txn"
 
 
 def enabled() -> list[Desk]:

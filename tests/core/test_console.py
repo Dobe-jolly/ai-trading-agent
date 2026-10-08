@@ -15,6 +15,7 @@ from agentcore.audit import AuditLog
 from agentcore.portal.server import HttpError, make_handler
 from agentcore.portal.users import UserStore
 from ecocash.config import Settings as EcoSettings
+from failed_txn.config import Settings as TxnSettings
 from nmbz.console import Console
 from sms_alerts.config import Settings as SmsSettings
 
@@ -30,15 +31,22 @@ def console(tmp_path):
     eco = replace(EcoSettings.from_env(env_file=tmp_path / "none.env"), state_db=tmp_path / "eco" / "agent.sqlite",
                   kill_switch_file=tmp_path / "eco" / "STOP", mode_override_file=tmp_path / "eco" / "HOLD",
                   portal_users_file=tmp_path / "users.json")
-    return Console({"sms_alerts": sms, "ecocash": eco}, users, stop_file=tmp_path / "STOP")
+    txn = replace(TxnSettings.from_env(env_file=tmp_path / "none.env"), state_db=tmp_path / "txn" / "agent.sqlite",
+                  kill_switch_file=tmp_path / "txn" / "STOP", mode_override_file=tmp_path / "txn" / "HOLD",
+                  portal_users_file=tmp_path / "users.json")
+    return Console({"sms_alerts": sms, "ecocash": eco, "failed_txn": txn}, users, stop_file=tmp_path / "STOP")
 
 
 def test_service_lists_each_desk_with_its_wording(console):
     svc = console.get("/api/service", {}, "dobe", "admin")
-    assert [d["key"] for d in svc["desks"]] == ["sms_alerts", "ecocash"]
+    assert [d["key"] for d in svc["desks"]] == ["sms_alerts", "ecocash", "failed_txn"]
     eco = svc["desks"][1]
     assert eco["title"] == "EcoCash" and eco["vocab"]["chart"]["key"] == "outcomes_by_day"
     assert "already_linked" in eco["vocab"]["status"] and svc["paused"] is False
+    txn = svc["desks"][2]
+    assert txn["vocab"]["anomaly"]["unavailable"] and "reversal_failed" in txn["vocab"]["status"]
+    assert "outcomes_by_day" in console.get("/api/d/failed_txn/overview", {}, "dobe", "admin")
+    assert console.get("/api/d/failed_txn/anomalies", {}, "dobe", "admin")["report"] is None
 
 
 def test_desk_paths_reach_that_desks_log_only(console):
@@ -61,11 +69,11 @@ def test_pausing_every_desk_is_for_admins_and_logged_on_each_desk(console):
     assert err.value.status == 403
     svc = console.post("/api/service/controls", {"pause": True, "note": "core banking maintenance"}, "dobe", "admin")
     assert svc["paused"] and console.stop_file.exists()
-    for key in ("sms_alerts", "ecocash"):
+    for key in ("sms_alerts", "ecocash", "failed_txn"):
         events = console.get(f"/api/d/{key}/controls", {}, "dobe", "admin")["events"]
         assert events[0]["action"] == "pause every desk" and events[0]["detail"] == "core banking maintenance"
     status, body = console.healthz()
-    assert status == 200 and body["paused"] and set(body["desks"]) == {"sms_alerts", "ecocash"}
+    assert status == 200 and body["paused"] and set(body["desks"]) == {"sms_alerts", "ecocash", "failed_txn"}
     assert not console.post("/api/service/controls", {"pause": False}, "dobe", "admin")["paused"]
 
 
@@ -82,7 +90,7 @@ def test_over_http_with_one_sign_in(console):
 
     try:
         status, body, _ = get("/api/service")
-        assert status == 200 and len(json.loads(body)["desks"]) == 2
+        assert status == 200 and len(json.loads(body)["desks"]) == 3
         status, body, _ = get("/")
         assert b'meta name="portal" content="served"' in body and b'id="desks"' in body
         _, _, headers = get("/api/d/sms_alerts/export/decisions.csv")

@@ -20,6 +20,8 @@ DESK = "ecocash"
 PREFIX = "ECOCASH"  # ECOCASH_<SETTING> overrides <SETTING> for this desk
 VALID_MODES = ("shadow", "notes", "live")
 VALID_REPLY_SOURCES = ("model", "template")
+# The failed-transactions desk owns these, even under the EcoCash topic
+FAILED_TXN_TOPICS = ("Failed ZIPIT Transaction,Ecocash / Failed Transactions,FAILED ECOCASH B2W / WB2,NMB Connect / Failed Transaction,FAILED AIRTIME PURCHASE,FAILED ZESA,Postilion transactions,NMB Connect / USSD / Failed Transactions")
 
 
 _DEFAULT = Env(None, BASE_DIR)
@@ -184,7 +186,7 @@ class Settings:
             standby_db_name=_str("STANDBY_DB_NAME", "STANDBY DB") or "STANDBY DB",
             ecocash_topics=_list("ECOCASH_HELP_TOPICS", "EcoCash"),
             ecocash_keywords=_list("ECOCASH_KEYWORDS", "ecocash,eco cash"),
-            ecocash_exclude_topics=_list("ECOCASH_EXCLUDE_TOPICS", "SMS Alerts"),
+            ecocash_exclude_topics=_list("ECOCASH_EXCLUDE_TOPICS", "SMS Alerts," + FAILED_TXN_TOPICS),
             ecocash_content_days=max(1, _int("ECOCASH_CONTENT_DAYS", 30) or 30),
             lookback_days=max(7, _int("ECOCASH_LOOKBACK_DAYS", 60) or 60),
             attempts_table=_str("ECOCASH_ATTEMPTS_TABLE", "ecocash_link_attempts") or "ecocash_link_attempts",
