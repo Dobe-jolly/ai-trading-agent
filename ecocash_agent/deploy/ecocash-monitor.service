@@ -1,0 +1,25 @@
+[Unit]
+Description=EcoCash monitor: records every EcoCash link and delink request (replaces ecocash-registration-monitor)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# A dedicated user that may read the journal (the Java monitor ran as root).
+User=ecomonitor
+Group=ecomonitor
+SupplementaryGroups=systemd-journal
+WorkingDirectory=/opt/ecocash-agent
+EnvironmentFile=/etc/ecocash-agent/monitor.env
+ExecStart=/opt/ecocash-agent/.venv/bin/python -m agent monitor
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ecocash-agent/state
+
+[Install]
+WantedBy=multi-user.target

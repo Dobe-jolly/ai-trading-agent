@@ -1,0 +1,23 @@
+[Unit]
+Description=SMS Alerts agent portal (audit and monitoring console)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=smsagent
+Group=smsagent
+WorkingDirectory=/opt/sms-alerts-agent
+EnvironmentFile=/etc/sms-alerts-agent/agent.env
+ExecStart=/opt/sms-alerts-agent/.venv/bin/python -m agent portal
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# The portal writes reviews and the operator log, and the pause / mode-hold files.
+ReadWritePaths=/opt/sms-alerts-agent/state
+
+[Install]
+WantedBy=multi-user.target

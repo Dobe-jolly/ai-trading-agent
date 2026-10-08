@@ -1,0 +1,21 @@
+[Unit]
+Description=SMS Alerts agent (one pass over open SMS Alerts tickets)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=smsagent
+Group=smsagent
+WorkingDirectory=/opt/sms-alerts-agent
+EnvironmentFile=/etc/sms-alerts-agent/agent.env
+ExecStart=/opt/sms-alerts-agent/.venv/bin/python -m agent run
+# A pass can include several 180 s Metabase queries per ticket.
+TimeoutStartSec=1800
+# Exit 3 = finished but some tickets errored (they are retried next run).
+SuccessExitStatus=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/sms-alerts-agent/state /opt/sms-alerts-agent/reports

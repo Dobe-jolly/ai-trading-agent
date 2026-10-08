@@ -1,0 +1,1269 @@
+<title>SMS Alerts Agent Console</title>
+<!--PORTAL-SERVED-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: operations console. Section rail on the left (top tabs on phones), a health strip pinned
+   over the work area, and every page ordered summary first, detail after. */
+:root {
+  --bg: #f3f5f3;
+  --surface: #ffffff;
+  --surface-2: #eaeeea;
+  --line: #d6dcd7;
+  --ink: #17201b;
+  --ink-2: #4a5650;
+  --ink-3: #75817a;
+  --accent: #2a4cc2;
+  --accent-soft: #e3e9fb;
+  --ok: #1d7a4f;   --ok-soft: #dff1e7;
+  --warn: #9a6205; --warn-soft: #f8ebcf;
+  --crit: #b3372a; --crit-soft: #f8e1dd;
+  --ask: #6447bd;  --ask-soft: #ebe4fa;
+  --idle: #7d8780; --idle-soft: #e7eae7;
+  --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Public Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  --radius: 6px;
+  --shadow: 0 1px 2px rgb(16 24 20 / .06), 0 4px 14px rgb(16 24 20 / .05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1312; --surface: #161b19; --surface-2: #1d2421; --line: #2a3330;
+    --ink: #e4ebe7; --ink-2: #a6b2ab; --ink-3: #7a867f;
+    --accent: #8ea5ff; --accent-soft: #1f2a4d;
+    --ok: #57c993; --ok-soft: #173326; --warn: #e5aa45; --warn-soft: #382a10;
+    --crit: #f1806e; --crit-soft: #3d1d18; --ask: #b8a3ff; --ask-soft: #2a2245;
+    --idle: #8d978f; --idle-soft: #232a27;
+    --shadow: 0 1px 2px rgb(0 0 0 / .3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1312; --surface: #161b19; --surface-2: #1d2421; --line: #2a3330;
+  --ink: #e4ebe7; --ink-2: #a6b2ab; --ink-3: #7a867f;
+  --accent: #8ea5ff; --accent-soft: #1f2a4d;
+  --ok: #57c993; --ok-soft: #173326; --warn: #e5aa45; --warn-soft: #382a10;
+  --crit: #f1806e; --crit-soft: #3d1d18; --ask: #b8a3ff; --ask-soft: #2a2245;
+  --idle: #8d978f; --idle-soft: #232a27;
+  --shadow: 0 1px 2px rgb(0 0 0 / .3);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 400 14px/1.5 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-underline-offset: 2px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { font-family: var(--font-display); font-stretch: 85%; letter-spacing: -.005em; text-wrap: balance; margin: 0; }
+h1 { font-size: 1.55rem; font-weight: 700; }
+h2 { font-size: 1.05rem; font-weight: 650; }
+h3 { font-size: .92rem; font-weight: 650; }
+.mono { font-family: var(--font-mono); font-size: .86em; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--ink-2); }
+.faint { color: var(--ink-3); }
+.label { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; color: var(--ink-3); }
+
+/* shell */
+.app { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-height: 100%; }
+.rail { background: var(--surface); border-right: 1px solid var(--line); padding: 18px 12px; display: flex; flex-direction: column; gap: 18px; position: sticky; top: 0; height: 100vh; }
+.brand { display: flex; gap: 10px; align-items: center; padding: 0 6px; }
+.brand svg { flex: none; }
+.brand b { font-family: var(--font-display); font-stretch: 80%; font-size: 1.02rem; font-weight: 750; line-height: 1.1; display: block; }
+.brand span { font-size: .72rem; color: var(--ink-3); }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav a { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: var(--radius); color: var(--ink-2); text-decoration: none; font-weight: 500; }
+.nav a:hover { background: var(--surface-2); color: var(--ink); }
+.nav a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.nav .count { font-size: .72rem; font-variant-numeric: tabular-nums; background: var(--surface-2); color: var(--ink-2); border-radius: 999px; padding: 0 7px; }
+.rail-foot { margin-top: auto; font-size: .75rem; color: var(--ink-3); padding: 0 6px; display: grid; gap: 4px; }
+.main { min-width: 0; padding-inline: 28px; padding-block: 0 48px; }
+
+/* health strip */
+.strip { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(6px); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-block: 12px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
+.strip .spacer { flex: 1; }
+.pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: .78rem; font-weight: 600; border: 1px solid transparent; white-space: nowrap; }
+.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.crit { background: var(--crit-soft); color: var(--crit); }
+.pill.ask { background: var(--ask-soft); color: var(--ask); }
+.pill.idle { background: var(--idle-soft); color: var(--ink-2); }
+.pill.outline { border-color: var(--line); color: var(--ink-2); background: var(--surface); font-weight: 500; }
+.demo-banner { background: var(--warn-soft); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); padding: 8px 12px; border-radius: var(--radius); font-size: .82rem; margin-bottom: 18px; }
+
+/* page head */
+.head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.head p { margin: 4px 0 0; color: var(--ink-2); max-width: 70ch; }
+.stack { display: grid; gap: 18px; align-content: start; }
+.grid-2 { display: grid; gap: 18px; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; min-width: 0; }
+.panel > header { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.panel > header p { margin: 2px 0 0; font-size: .8rem; color: var(--ink-3); }
+
+/* KPIs */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.kpi { background: var(--surface); padding: 12px 14px 14px; display: grid; gap: 2px; align-content: start; box-shadow: 1px 0 0 var(--line), 0 1px 0 var(--line); }
+.kpi b { font-family: var(--font-display); font-stretch: 80%; font-size: 1.85rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.kpi small { color: var(--ink-3); font-size: .75rem; }
+.kpi.flag b { color: var(--warn); }
+
+/* charts */
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .axis { fill: var(--ink-3); font: 500 11px var(--font-body); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: .78rem; color: var(--ink-2); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.f-close { fill: var(--ok); background: var(--ok); }
+.f-ask { fill: var(--ask); background: var(--ask); }
+.f-esc { fill: var(--crit); background: var(--crit); }
+.f-none { fill: var(--idle); background: var(--idle); }
+.f-delivered { fill: var(--ok); background: var(--ok); }
+.f-queued { fill: var(--warn); background: var(--warn); }
+.f-failed { fill: var(--crit); background: var(--crit); }
+.f-never { fill: color-mix(in srgb, var(--crit) 55%, var(--ink)); background: color-mix(in srgb, var(--crit) 55%, var(--ink)); }
+.f-unknown { fill: var(--idle); background: var(--idle); }
+.hops { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .74rem; color: var(--ink-3); margin-top: 8px; }
+.hops span { border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font-family: var(--font-mono); font-size: .7rem; color: var(--ink-2); }
+
+/* bar lists */
+.bars { display: grid; gap: 7px; }
+.bars .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; font-size: .82rem; }
+.bars .track { grid-column: 1 / -1; height: 5px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.bars .fill { height: 100%; background: var(--accent); border-radius: 3px; }
+
+/* tables */
+.table-wrap { overflow-x: auto; margin-inline: -18px; padding-inline: 18px; }
+table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+th { text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); font-weight: 600; padding: 6px 10px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+tr.click { cursor: pointer; }
+tr.click:hover td, tr.sel td { background: var(--surface-2); }
+td.nowrap, th.nowrap { white-space: nowrap; }
+.ticket { font-family: var(--font-mono); font-weight: 500; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font-family: var(--font-mono); font-size: .72rem; padding: 1px 6px; border-radius: 4px; background: var(--surface-2); color: var(--ink-2); white-space: nowrap; }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.crit { background: var(--crit-soft); color: var(--crit); }
+.chip.ask { background: var(--ask-soft); color: var(--ask); }
+.mark { display: inline-block; font-size: .68rem; font-weight: 600; letter-spacing: .04em; padding: 0 5px; border-radius: 3px; text-transform: uppercase; }
+.mark.stop { background: var(--warn-soft); color: var(--warn); }
+.mark.fb { background: var(--accent-soft); color: var(--accent); }
+.mark.err { background: var(--crit-soft); color: var(--crit); }
+.empty { padding: 26px 8px; text-align: center; color: var(--ink-3); }
+
+/* filters & forms */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-bottom: 14px; }
+.field { display: grid; gap: 3px; }
+.field label { font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); font-weight: 600; }
+select, input[type="text"], input[type="search"], textarea { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 9px; min-height: 34px; max-width: 100%; }
+textarea { min-height: 70px; width: 100%; resize: vertical; }
+.btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 6px 12px; min-height: 34px; cursor: pointer; font-weight: 600; font-size: .84rem; text-decoration: none; color: var(--ink); }
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.danger { background: var(--crit); border-color: var(--crit); color: var(--surface); }
+.btn.good { background: var(--ok); border-color: var(--ok); color: var(--surface); }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+.seg { justify-self: start; display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; flex-wrap: wrap; }
+.seg label { padding: 6px 12px; cursor: pointer; font-weight: 600; font-size: .84rem; border-right: 1px solid var(--line); }
+.seg label:last-child { border-right: 0; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg input:checked + span { color: var(--accent); }
+.seg label:has(input:checked) { background: var(--accent-soft); }
+.seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 12px; font-size: .82rem; color: var(--ink-2); }
+
+/* detail */
+.dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; font-size: .86rem; margin: 0; }
+.dl dt { color: var(--ink-3); }
+.dl dd { margin: 0; min-width: 0; }
+.reply { background: var(--surface-2); border-radius: var(--radius); padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .88rem; line-height: 1.55; }
+.reply.posted { border-left: 3px solid var(--ok); border-radius: 0 var(--radius) var(--radius) 0; }
+.tok { font-family: var(--font-mono); font-size: .78em; background: var(--accent-soft); color: var(--accent); border-radius: 3px; padding: 0 4px; white-space: nowrap; }
+.acct { display: grid; gap: 4px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.attachment { display: grid; gap: 4px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.attachment:last-child { border-bottom: 0; padding-bottom: 0; }
+.acct:last-child { border-bottom: 0; }
+.meter { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; width: 120px; display: inline-block; vertical-align: middle; margin-left: 8px; }
+.meter > i { display: block; height: 100%; background: var(--accent); }
+.note { border-left: 3px solid var(--warn); background: var(--warn-soft); color: var(--ink); padding: 8px 12px; border-radius: 0 var(--radius) var(--radius) 0; font-size: .85rem; }
+details.msg { border: 1px solid var(--line); border-radius: var(--radius); margin-top: 8px; background: var(--surface); }
+details.msg > summary { cursor: pointer; padding: 7px 10px; font-size: .8rem; font-weight: 600; color: var(--ink-2); list-style-position: inside; }
+details.msg pre { margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); font: .74rem/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
+.role { font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.role.model { color: var(--accent); }
+.role.tool { color: var(--ok); }
+.role.err { color: var(--crit); }
+.review-box { display: grid; gap: 10px; }
+.review-item { font-size: .82rem; padding: 8px 0; border-top: 1px solid var(--line); }
+
+/* controls */
+.control { display: grid; gap: 10px; }
+.confirm { border: 1px solid var(--line); background: var(--surface-2); border-radius: var(--radius); padding: 12px; display: grid; gap: 10px; }
+.big-state { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.big-state b { font-family: var(--font-display); font-stretch: 80%; font-size: 1.6rem; }
+
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: var(--radius); font-size: .85rem; box-shadow: var(--shadow); z-index: 20; max-width: calc(100% - 32px); }
+.error-box { border: 1px solid var(--crit); background: var(--crit-soft); color: var(--ink); border-radius: var(--radius); padding: 12px 14px; }
+.loading { color: var(--ink-3); padding: 30px 0; }
+
+.grid-even { display: grid; gap: 18px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .grid-2, .grid-even { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .rail { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--line); gap: 10px; }
+  .nav { flex-direction: row; overflow-x: auto; width: 100%; gap: 4px; }
+  .nav a { white-space: nowrap; padding: 6px 10px; }
+  .rail-foot { display: none; }
+  .main { padding-inline: 16px; }
+  .kpi b { font-size: 1.5rem; }
+}
+/* approval desk: queue | how the agent got there | the proposed reply */
+.desk { display: grid; gap: 16px; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(300px, 400px); align-items: start; }
+.desk > * { min-width: 0; }
+.desk-col { display: grid; gap: 14px; align-content: start; }
+.desk-side { position: sticky; top: 76px; }
+.qlist { display: grid; gap: 6px; }
+.qitem { display: grid; gap: 4px; text-align: left; width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 9px 11px; cursor: pointer; }
+.qitem:hover { border-color: var(--ink-3); }
+.qitem[aria-current="true"] { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); background: var(--accent-soft); }
+.qitem .top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.qitem .why { font-size: .76rem; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.steps { display: grid; gap: 0; position: relative; }
+.step { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; padding-bottom: 14px; position: relative; }
+.step::before { content: ""; position: absolute; left: 10px; top: 20px; bottom: 0; width: 2px; background: var(--line); }
+.step:last-child::before { display: none; }
+.step .n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font: 600 .7rem var(--font-mono); background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); z-index: 1; }
+.step.tool .n { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.step.think .n { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.step.fail .n { background: var(--crit-soft); color: var(--crit); border-color: transparent; }
+.step .body { min-width: 0; display: grid; gap: 6px; }
+.step .body p { margin: 0; font-size: .86rem; }
+.io { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
+.io pre { margin: 0; background: var(--surface-2); border-radius: var(--radius); padding: 8px 10px; font: .72rem/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
+.why-box { border-left: 3px solid var(--ask); background: var(--ask-soft); padding: 8px 12px; border-radius: 0 var(--radius) var(--radius) 0; font-size: .84rem; }
+textarea.edit { width: 100%; min-height: 170px; font: .86rem/1.55 var(--font-mono); border: 1px solid var(--accent); border-radius: var(--radius); padding: 10px 12px; background: var(--surface); resize: vertical; }
+.actions-row { display: flex; flex-wrap: wrap; gap: 8px; }
+kbd { font: 600 .68rem var(--font-mono); border: 1px solid currentColor; border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; opacity: .8; }
+.live { display: grid; gap: 4px; font-size: .8rem; }
+.live .now { font-weight: 600; }
+.live ol { margin: 0; padding-left: 18px; color: var(--ink-2); font-family: var(--font-mono); font-size: .74rem; }
+.palette-back { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 35%, transparent); z-index: 30; display: grid; justify-items: center; align-items: start; padding: 12vh 16px 16px; }
+.palette { width: min(560px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 20px 50px rgb(0 0 0 / .25); overflow: hidden; }
+.palette input { width: 100%; border: 0; border-bottom: 1px solid var(--line); padding: 14px 16px; font-size: 1rem; background: var(--surface); outline: none; }
+.palette ul { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow: auto; }
+.palette li a { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: var(--radius); color: var(--ink); text-decoration: none; }
+.palette li a[aria-selected="true"], .palette li a:hover { background: var(--accent-soft); color: var(--accent); }
+.palette .hint { padding: 8px 14px; border-top: 1px solid var(--line); font-size: .75rem; color: var(--ink-3); display: flex; gap: 12px; flex-wrap: wrap; }
+.keys { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; padding: 12px 16px; font-size: .85rem; }
+@media (max-width: 1280px) { .desk { grid-template-columns: minmax(200px, 250px) minmax(0, 1fr); } .desk-right { grid-column: 2; } }
+@media (max-width: 900px) { .desk { grid-template-columns: minmax(0, 1fr); } .desk-right { grid-column: auto; } .desk-side { position: static; } .io { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: no-preference) { .nav a, .btn, tr.click td, .qitem { transition: background-color .12s, border-color .12s; } }
+</style>
+
+<div class="app">
+  <aside class="rail">
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
+        <rect x="1" y="1" width="28" height="28" rx="7" fill="var(--accent)"/>
+        <path d="M8 11.5h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-8l-4 3v-3H8a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2z" fill="var(--surface)"/>
+        <circle cx="11" cy="16" r="1.3" fill="var(--accent)"/><circle cx="15" cy="16" r="1.3" fill="var(--accent)"/><circle cx="19" cy="16" r="1.3" fill="var(--accent)"/>
+      </svg>
+      <div><b>SMS Alerts agent</b><span>Service desk console</span></div>
+    </div>
+    <nav class="nav" aria-label="Sections">
+      <a href="#overview" data-route="overview">Overview</a>
+      <a href="#anomalies" data-route="anomalies">Anomalies <span id="nav-anom"></span></a>
+      <a href="#queue" data-route="queue">Open tickets <span class="count" id="nav-queue"></span></a>
+      <a href="#approvals" data-route="approvals">Approvals <span class="count" id="nav-approvals"></span></a>
+      <a href="#decisions" data-route="decisions">Decisions</a>
+      <a href="#review" data-route="review">Review <span class="count" id="nav-review"></span></a>
+      <a href="#emails" data-route="emails">Emails &amp; alerts <span class="count" id="nav-emails"></span></a>
+      <a href="#runs" data-route="runs">Runs</a>
+      <a href="#controls" data-route="controls">Controls</a>
+    </nav>
+    <div class="rail-foot" id="rail-foot"></div>
+  </aside>
+  <main class="main">
+    <div class="strip" id="strip" aria-live="polite"></div>
+    <div id="demo"></div>
+    <div id="view"><p class="loading">Loading…</p></div>
+  </main>
+</div>
+<div class="toast" id="toast" hidden></div>
+<div id="overlay"></div>
+
+<script>
+"use strict";
+/* ---------------- data access ---------------- */
+const SERVED = !!document.querySelector('meta[name="portal"][content="served"]');
+const DEMO_EL = document.getElementById("demo-data");
+const DEMO = !SERVED && DEMO_EL ? JSON.parse(DEMO_EL.textContent) : null;
+const S = { session: null, route: "overview", id: null, filters: { days: "14", action: "", mode: "", status: "", flag: "", review: "", q: "" }, offset: 0, timer: null };
+
+class ApiError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
+
+async function apiGet(path) {
+  if (DEMO) return demoGet(path);
+  if (!SERVED) throw new ApiError(0, "This page has to be opened from the portal on the agent server (python -m agent portal).");
+  const res = await fetch(path, { headers: { Accept: "application/json" }, credentials: "same-origin" });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, body.error || res.statusText);
+  return body;
+}
+async function apiPost(path, payload) {
+  if (DEMO) return demoPost(path, payload);
+  const res = await fetch(path, { method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json", "X-Portal-Request": "1", Accept: "application/json" },
+    body: JSON.stringify(payload) });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, body.error || res.statusText);
+  return body;
+}
+
+/* demo mode: answers from the embedded snapshot; edits stay in this browser tab */
+function demoGet(path) {
+  const url = new URL(path, "https://demo.local");
+  const p = Object.fromEntries(url.searchParams);
+  const d = DEMO;
+  if (url.pathname === "/api/session") return { ...d.session, ...DEMO_STATE.session };
+  if (url.pathname === "/api/overview") return d.overview;
+  if (url.pathname === "/api/queue") return d.queue;
+  if (url.pathname === "/api/runs") return d.runs;
+  if (url.pathname === "/api/anomalies") return d.anomalies;
+  const am = url.pathname.match(/^\/api\/anomalies\/(\d+)$/);
+  if (am) { const rep = (d.anomaly_reports || {})[am[1]]; if (!rep) throw new ApiError(404, "No report with that id."); return { ...d.anomalies, report: rep }; }
+  if (url.pathname === "/api/notifications") {
+    const items = d.notifications.items.filter(n => !p.status || n.status === p.status);
+    return { ...d.notifications, items, retryable: DEMO_STATE.retried ? 0 : d.notifications.retryable };
+  }
+  if (url.pathname === "/api/quality") return d.quality;
+  if (url.pathname === "/api/live") return d.live || { running: false };
+  if (url.pathname === "/api/approvals") {
+    const all = (d.approvals || { pending: [], decided: [] });
+    const decided = Object.values(DEMO_STATE.approvals);
+    return { ...all, can_decide: true, approval_mode: d.session.approval_mode,
+             pending: all.pending.filter(a => !DEMO_STATE.approvals[a.id]), decided: [...decided, ...all.decided] };
+  }
+  if (url.pathname === "/api/controls") return { ...d.controls, ...DEMO_STATE.controls, events: [...DEMO_STATE.events, ...d.controls.events] };
+  const m = url.pathname.match(/^\/api\/decisions\/(\d+)$/);
+  if (m) {
+    const det = d.details[m[1]] || d.decisions.find(x => String(x.id) === m[1]);
+    if (!det) throw new ApiError(404, "No decision with that id.");
+    return { reason: "", evidence: [], transcript: [], history: [], reviews: [], tools_used: [], attachments: [], ...det,
+             reviews: [...(DEMO_STATE.reviews[m[1]] || []), ...(det.reviews || [])] };
+  }
+  if (url.pathname === "/api/decisions") {
+    let items = d.decisions.filter(x => (p.mode ? x.mode === p.mode : x.mode !== "audit"));
+    const cutoff = Date.now() - Number(p.days || 14) * 864e5;
+    items = items.filter(x => new Date(x.created_at).getTime() >= cutoff);
+    if (p.action) items = items.filter(x => x.final_action === p.action);
+    if (p.status) items = items.filter(x => Object.values(x.statuses || {}).includes(p.status));
+    if (p.q) items = items.filter(x => String(x.ticket_number).includes(p.q));
+    if (p.flag === "guardrail") items = items.filter(x => x.guardrail_changed);
+    if (p.flag === "fallback") items = items.filter(x => x.category === "rules_fallback");
+    if (p.flag === "error") items = items.filter(x => x.error);
+    if (p.review === "unreviewed") items = items.filter(x => !x.review && !DEMO_STATE.reviews[x.id]);
+    if (p.review === "correct" || p.review === "incorrect") items = items.filter(x => x.review === p.review);
+    const offset = Number(p.offset || 0), limit = Number(p.limit || 50);
+    return { total: items.length, limit, offset, items: items.slice(offset, offset + limit) };
+  }
+  throw new ApiError(404, "Not found.");
+}
+const DEMO_STATE = { session: {}, controls: {}, events: [], reviews: {}, approvals: {} };
+function demoPost(path, body) {
+  const am = path.match(/^\/api\/approvals\/(\d+)$/);
+  if (am) {
+    const a = (DEMO.approvals.pending || []).find(x => String(x.id) === am[1]);
+    if (!a || DEMO_STATE.approvals[a.id]) throw new ApiError(409, "This reply is no longer waiting.");
+    const edited = body.reply != null && body.reply.trim() !== (a.reply_masked || "").trim();
+    const done = { ...a, status: body.verdict === "approve" ? "approved" : "rejected", decided_by: DEMO.session.user,
+                   decided_at: new Date().toISOString(), comment: body.comment || null, edited: edited ? 1 : 0,
+                   reply_masked: edited ? body.reply.trim() : a.reply_masked };
+    DEMO_STATE.approvals[a.id] = done;
+    DEMO_STATE.session.approvals_pending = Math.max(0, (DEMO.session.approvals_pending || 0) - Object.keys(DEMO_STATE.approvals).length);
+    return done;
+  }
+  const m = path.match(/^\/api\/decisions\/(\d+)\/reviews$/);
+  if (m) {
+    const review = { id: Date.now(), decision_id: Number(m[1]), created_at: new Date().toISOString(), reviewer: DEMO.session.user,
+                     verdict: body.verdict, expected_action: body.expected_action || null, comment: body.comment || null };
+    (DEMO_STATE.reviews[m[1]] = DEMO_STATE.reviews[m[1]] || []).unshift(review);
+    return review;
+  }
+  if (path === "/api/notifications/retry") { const n = DEMO_STATE.retried ? 0 : DEMO.notifications.retryable; DEMO_STATE.retried = true; return { requeued: n }; }
+  if (path === "/api/controls") {
+    const c = DEMO_STATE.controls;
+    const now = new Date().toISOString();
+    if ("kill_switch" in body) { c.kill_switch = !!body.kill_switch; DEMO_STATE.session.kill_switch = c.kill_switch;
+      DEMO_STATE.events.unshift({ created_at: now, actor: DEMO.session.user, action: body.kill_switch ? "pause" : "resume", detail: body.note || "" }); }
+    if ("mode_override" in body) {
+      c.mode_override = body.mode_override || null;
+      c.effective_mode = c.mode_override || DEMO.controls.configured_mode;
+      DEMO_STATE.session.effective_mode = c.effective_mode;
+      DEMO_STATE.events.unshift({ created_at: now, actor: DEMO.session.user, action: c.mode_override ? `hold at ${c.mode_override}` : "release mode hold", detail: body.note || "" });
+    }
+    return demoGet("/api/controls");
+  }
+  throw new ApiError(404, "Not found.");
+}
+
+/* ---------------- vocabulary ---------------- */
+const ACTIONS = {
+  reply_and_close: { label: "Replied & closed", short: "Closed", cls: "ok", fill: "f-close" },
+  request_info: { label: "Asked the owner", short: "Asked", cls: "ask", fill: "f-ask" },
+  escalate: { label: "Escalated to staff", short: "Escalated", cls: "crit", fill: "f-esc" },
+  no_action: { label: "No action", short: "None", cls: "idle", fill: "f-none" },
+};
+const STATUS = {
+  delivered_check_spam: ["ok", "Gateway confirmed delivery; number matches Intellect"],
+  different_number: ["warn", "Ticket number differs from Intellect"],
+  no_txn_different_number: ["warn", "No alerts in window; ticket number differs from Intellect"],
+  no_number: ["warn", "No mobile number on Intellect"],
+  no_txn_no_number: ["warn", "No alerts in window and no number on Intellect"],
+  no_txn_number_match: ["ok", "Set up correctly; no alertable activity in the window"],
+  sms_not_enabled: ["warn", "Account-level SMS flag is off"],
+  sms_registration_disabled: ["warn", "IDCCOB SMS-alert registration is off"],
+  sms_no_customer_email: ["warn", "Alert not sent: no valid customer email in core (known platform issue)"],
+  salaries_match: ["ok", "Salaries: number matches customer_accounts_idc"],
+  salaries_phone_mismatch: ["warn", "Salaries: number differs on customer_accounts_idc"],
+  salaries_phone_missing: ["warn", "Salaries: no valid number on customer_accounts_idc"],
+  salaries_account_missing: ["warn", "Salaries: account not on customer_accounts_idc"],
+  salaries_unverified: ["crit", "Salaries: number matches but delivery cannot be proven"],
+  sms_activation_unknown: ["warn", "Account SMS flag could not be read"],
+  results_found: ["idle", "Alerts found; no ticket number to compare"],
+  invalid_ticket_phone: ["ask", "Phone on the ticket is not a valid mobile"],
+  invalid_account_number: ["ask", "Account not found in core banking"],
+  socket_pending: ["crit", "Alert still queued at the SMS gateway"],
+  socket_failed: ["crit", "SMS gateway failed to send"],
+  socket_not_found: ["crit", "Generated in core, never reached the gateway"],
+  socket_unknown: ["crit", "Gateway delivery could not be confirmed"],
+  both_alert_types_checked: ["idle", "Salaries and debits both checked"],
+};
+const MODES = { live: ["ok", "Live"], notes: ["ask", "Notes only"], shadow: ["idle", "Shadow"], audit: ["idle", "Audit replay"] };
+
+/* ---------------- helpers ---------------- */
+const $ = (sel, root = document) => root.querySelector(sel);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const tokens = text => esc(text).replace(/&lt;(MOBILE|NUMBER|EMAIL|NATIONAL_ID)_(\d+)&gt;/g, (_, k, n) => `<span class="tok" title="Masked value, filled in when posted">${k.toLowerCase().replace("_", " ")} ${n}</span>`);
+const fmtInt = n => (n == null ? "–" : Number(n).toLocaleString("en-GB"));
+const pct = (a, b) => (b ? Math.round((a / b) * 100) + "%" : "–");
+function when(iso) {
+  if (!iso) return "–";
+  const d = new Date(iso);
+  return d.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+function ago(iso) {
+  if (!iso) return "never";
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`;
+}
+const actionPill = a => { const x = ACTIONS[a] || { label: a || "–", cls: "idle" }; return `<span class="pill ${x.cls}"><span class="dot"></span>${esc(x.label)}</span>`; };
+const statusChip = s => { const [cls, text] = STATUS[s] || ["", s]; return `<span class="chip ${cls}" title="${esc(text)}">${esc(s)}</span>`; };
+const statusChips = map => { const v = Object.values(map || {}); return v.length ? `<span class="chips">${v.map(statusChip).join("")}</span>` : `<span class="faint">–</span>`; };
+const MAIL = { sent: ["ok", "sent"], pending: ["warn", "waiting"], failed: ["crit", "failed"], skipped: ["", "not sent"] };
+const mailChip = st => { const [cls, label] = MAIL[st] || ["", st]; return `<span class="chip ${cls}">${esc(label)}</span>`; };
+const modeChip = m => { const [cls, label] = MODES[m] || ["idle", m]; return `<span class="pill ${cls}">${esc(label)}</span>`; };
+const ticketLink = (num, id) => {
+  const tpl = S.session && S.session.osticket_ticket_url;
+  const text = `#${esc(num)}`;
+  return tpl ? `<a class="ticket" href="${esc(tpl.replace("{ticket_id}", id).replace("{number}", num))}" target="_blank" rel="noopener">${text}</a>` : `<span class="ticket">${text}</span>`;
+};
+function marks(d) {
+  const out = [];
+  if (d.guardrail_changed) out.push(`<span class="mark stop" title="Safety rules changed the model's proposal">stopped</span>`);
+  if (d.category === "rules_fallback") out.push(`<span class="mark fb" title="Claude was unreachable; decided by the rules">rules</span>`);
+  if (d.error) out.push(`<span class="mark err">error</span>`);
+  if (d.deferred) out.push(`<span class="mark stop">retry</span>`);
+  return out.join(" ");
+}
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), 3200);
+}
+function errorBox(err) {
+  return `<div class="error-box"><b>Could not load this page.</b><br>${esc(err.message || err)}</div>`;
+}
+
+/* ---------------- charts ---------------- */
+function chartWidth() {
+  const vw = window.innerWidth || 1280;
+  const w = vw <= 760 ? vw - 32 - 38 : vw <= 1100 ? vw - 216 - 56 - 38 : (Math.min(vw, 1900) - 216 - 56 - 18) / 2 - 38;
+  return Math.max(300, Math.round(w));
+}
+function stackedBars(rows, series, opts = {}) {
+  const W = chartWidth(), H = opts.height || 200, padL = 30, padB = 22, padT = 8;
+  const n = rows.length || 1;
+  const totals = rows.map(r => series.reduce((s, k) => s + (r[k.key] || 0), 0));
+  const raw = Math.max(1, ...totals);
+  const step = raw <= 5 ? 1 : raw <= 10 ? 2 : raw <= 25 ? 5 : raw <= 50 ? 10 : Math.ceil(raw / 50) * 10;
+  const max = Math.ceil(raw / step) * step;
+  const y = v => H - padB - (v / max) * (H - padB - padT);
+  const bw = (W - padL) / n;
+  let out = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label || "chart")}">`;
+  for (let v = 0; v <= max; v += step) {
+    out += `<line class="grid" x1="${padL}" x2="${W}" y1="${y(v)}" y2="${y(v)}"/><text class="axis" x="${padL - 6}" y="${y(v) + 3}" text-anchor="end">${v}</text>`;
+  }
+  rows.forEach((r, i) => {
+    let acc = 0;
+    const x = padL + i * bw + bw * 0.18, w = Math.max(2, bw * 0.64);
+    series.forEach(k => {
+      const v = r[k.key] || 0;
+      if (!v) return;
+      out += `<rect class="${k.fill}" x="${x.toFixed(1)}" y="${y(acc + v).toFixed(1)}" width="${w.toFixed(1)}" height="${(y(acc) - y(acc + v)).toFixed(1)}" rx="1.5"><title>${esc(r.day)} · ${esc(k.label)}: ${v}</title></rect>`;
+      acc += v;
+    });
+    const every = Math.max(1, Math.ceil(n / Math.max(3, Math.floor(W / 64))));
+    if (i % every === 0 || i === n - 1) {
+      let label;
+      if (opts.labelFn) label = opts.labelFn(r, i);
+      else { const dd = new Date(r.day + "T12:00:00"); label = `${dd.getDate()}/${dd.getMonth() + 1}`; }
+      out += `<text class="axis" x="${(padL + i * bw + bw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(label)}</text>`;
+    }
+  });
+  if (opts.refLine != null && opts.refLine <= max) {
+    out += `<line x1="${padL}" x2="${W}" y1="${y(opts.refLine)}" y2="${y(opts.refLine)}" stroke="var(--ink-2)" stroke-dasharray="4 4" stroke-width="1.2"/>
+      <text class="axis" x="${padL + 4}" y="${y(opts.refLine) - 4}" text-anchor="start" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(opts.refLabel || "usual")}</text>`;
+  }
+  return out + "</svg>";
+}
+const legend = series => `<div class="legend">${series.map(k => `<span><i class="${k.fill}"></i>${esc(k.label)}</span>`).join("")}</div>`;
+function barList(items, labelFn, valueKey = "count") {
+  if (!items.length) return `<p class="empty">Nothing in this period.</p>`;
+  const max = Math.max(...items.map(i => i[valueKey]));
+  return `<div class="bars">${items.map(i => `<div class="row"><span>${labelFn(i)}</span><b class="num">${fmtInt(i[valueKey])}</b><span class="track"><span class="fill" style="width:${(i[valueKey] / max) * 100}%"></span></span></div>`).join("")}</div>`;
+}
+
+/* ---------------- shell ---------------- */
+function renderStrip() {
+  const s = S.session; if (!s) return;
+  const h = S.health || {};
+  let agent;
+  if (s.kill_switch) agent = `<span class="pill warn"><span class="dot"></span>Paused</span>`;
+  else if (S.live && S.live.running) agent = `<a class="pill ok" href="#runs" style="text-decoration:none"><span class="dot"></span>Working${S.live.ticket_number ? ` on #${esc(S.live.ticket_number)}` : ""}${liveStep()}</a>`;
+  else if (h.running) agent = `<span class="pill ok"><span class="dot"></span>Running a pass now</span>`;
+  else if (h.stale) agent = `<span class="pill crit"><span class="dot"></span>No pass for ${h.minutes_since_last_run == null ? "a while" : Math.round(h.minutes_since_last_run) + " min"}</span>`;
+  else agent = `<span class="pill ok"><span class="dot"></span>Healthy · last pass ${esc(ago(h.last_run && (h.last_run.finished_at || h.last_run.started_at)))}</span>`;
+  const held = s.effective_mode !== s.configured_mode ? ` <span class="faint">(held from ${esc(s.configured_mode)})</span>` : "";
+  const an = s.anomaly && s.anomaly.severity !== "ok" && (Date.now() - new Date(s.anomaly.created_at)) < 3 * 3600e3 ? s.anomaly : null;
+  const anPill = an ? `<a class="pill ${an.severity === "incident" ? "crit" : "warn"}" href="#anomalies" style="text-decoration:none;white-space:normal"><span class="dot"></span>${an.severity === "incident" ? "Incident" : "Watch"}: ${esc(an.headline)}</a>` : "";
+  $("#nav-anom").innerHTML = an ? `<span class="pill ${an.severity === "incident" ? "crit" : "warn"}" style="padding:0 7px;font-size:.7rem">${an.severity === "incident" ? "incident" : "watch"}</span>` : "";
+  const waiting = s.approvals_pending ? `<a class="pill ask" href="#approvals" style="text-decoration:none"><span class="dot"></span>${s.approvals_pending} repl${s.approvals_pending === 1 ? "y" : "ies"} waiting for approval</a>` : "";
+  $("#nav-approvals").textContent = s.approvals_pending || "";
+  $("#strip").innerHTML = `${agent}${anPill}${waiting}<span class="pill outline">Mode&nbsp;${modeChip(s.effective_mode)}${held}</span>
+    <span class="spacer"></span><span class="pill outline">${esc(s.user)} · ${esc(s.role)}</span>`;
+  $("#rail-foot").innerHTML = `<span>Model <span class="mono">${esc(s.model)}</span></span><span>Posts as staff ${esc(s.reply_staff_id ?? "–")}</span>`;
+}
+function liveStep() {
+  const steps = (S.live && S.live.steps) || [];
+  const last = steps[steps.length - 1];
+  return last ? ` · <span class="mono" style="font-weight:500">${tokens(last.text.length > 48 ? last.text.slice(0, 47) + "…" : last.text)}</span>` : "";
+}
+async function pollLive() {
+  if (document.hidden) return;
+  try {
+    const was = S.live && S.live.running;
+    S.live = await apiGet("/api/live");
+    if (S.live.running || was) renderStrip();
+    if (was && !S.live.running) { await loadSession(); if (["overview", "queue", "runs"].includes(S.route)) refreshQuiet(); }
+    if (S.route === "runs" && $("#live-panel")) $("#live-panel").innerHTML = livePanel();
+  } catch (_) { /* the live view is optional */ }
+}
+function livePanel() {
+  const l = S.live || {};
+  if (!l.running) return `<p class="faint" style="margin:0">Not running. The next pass starts on the 15-minute timer.</p>`;
+  return `<div class="live"><div class="now">Run <span class="mono">${esc(l.run_id)}</span> · started ${esc(ago(l.started_at))}${l.ticket_number ? ` · ticket #${esc(l.ticket_number)} <span class="faint">(${esc(l.help_topic || "")})</span>` : ""}</div>
+    ${(l.steps || []).length ? `<ol>${l.steps.map(st => `<li>${tokens(st.text)} <span class="faint">${esc(ago(st.at))}</span></li>`).join("")}</ol>` : `<span class="faint">Reading the ticket…</span>`}</div>`;
+}
+function setNav() {
+  const current = S.route === "decision" ? "decisions" : S.route;
+  document.querySelectorAll(".nav a").forEach(a => { if (a.dataset.route === current) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+}
+function parseHash() {
+  const h = (location.hash || "#overview").slice(1);
+  const m = h.match(/^decision-(\d+)$/);
+  const a = h.match(/^anomaly-(\d+)$/);
+  if (m) { S.route = "decision"; S.id = m[1]; }
+  else if (a) { S.route = "anomalies"; S.id = a[1]; }
+  else { S.route = ["overview", "anomalies", "queue", "approvals", "decisions", "review", "emails", "runs", "controls"].includes(h) ? h : "overview"; S.id = null; }
+}
+async function render() {
+  parseHash(); setNav();
+  const view = $("#view");
+  clearInterval(S.timer);
+  try {
+    const page = PAGES[S.route === "decision" ? "decision" : S.route];
+    view.innerHTML = await page();
+    if (["overview", "queue", "runs", "anomalies"].includes(S.route) && !S.id) S.timer = setInterval(() => { if (!document.hidden) refreshQuiet(); }, 60000);
+    if (S.route === "approvals") afterApprovalsRender();
+  } catch (err) {
+    view.innerHTML = errorBox(err);
+  }
+}
+async function refreshQuiet() {
+  try { const html = await PAGES[S.route](); $("#view").innerHTML = html; await loadSession(); } catch (_) { /* keep the last view */ }
+}
+async function loadSession() {
+  S.session = await apiGet("/api/session");
+  try { S.health = (await apiGet("/api/overview?days=1")).health; } catch (_) { S.health = null; }
+  renderStrip();
+}
+
+/* ---------------- pages ---------------- */
+const PAGES = {};
+const ACTION_SERIES = [
+  { key: "reply_and_close", label: "Replied & closed", fill: "f-close" },
+  { key: "request_info", label: "Asked the owner", fill: "f-ask" },
+  { key: "escalate", label: "Escalated", fill: "f-esc" },
+  { key: "no_action", label: "No action", fill: "f-none" },
+];
+const GATEWAY_SERIES = [
+  { key: "delivered", label: "Delivered", fill: "f-delivered" },
+  { key: "queued", label: "Still queued", fill: "f-queued" },
+  { key: "failed", label: "Failed at gateway", fill: "f-failed" },
+  { key: "never_sent", label: "Never reached gateway", fill: "f-never" },
+  { key: "unknown", label: "Could not confirm", fill: "f-unknown" },
+];
+
+function decisionsTable(items, opts = {}) {
+  if (!items.length) return `<p class="empty">${esc(opts.empty || "No decisions match.")}</p>`;
+  return `<div class="table-wrap"><table><thead><tr><th>When</th><th>Ticket</th><th>Outcome</th><th>Checks found</th><th class="nowrap">Conf.</th>${opts.mode ? "<th>Mode</th>" : ""}<th>Review</th></tr></thead><tbody>
+  ${items.map(d => `<tr class="click" data-href="#decision-${d.id}">
+    <td class="nowrap num">${esc(when(d.created_at))}</td>
+    <td>${ticketLink(d.ticket_number, d.ticket_id)}</td>
+    <td>${d.error ? `<span class="pill crit">Error</span>` : actionPill(d.final_action)} ${marks(d)}</td>
+    <td>${statusChips(d.statuses)}</td>
+    <td class="num">${d.confidence == null ? "–" : Math.round(d.confidence * 100) + "%"}</td>
+    ${opts.mode ? `<td>${modeChip(d.mode)}</td>` : ""}
+    <td>${d.review ? `<span class="chip ${d.review === "correct" ? "ok" : "crit"}">${esc(d.review)}</span>` : `<span class="faint">–</span>`}</td>
+  </tr>`).join("")}</tbody></table></div>`;
+}
+
+PAGES.overview = async () => {
+  const o = await apiGet(`/api/overview?days=${encodeURIComponent(S.filters.days || 14)}`);
+  S.health = o.health; renderStrip();
+  const k = o.kpis;
+  const cost = k.est_cost != null ? `$${k.est_cost.toFixed(2)}` : `${fmtInt(k.input_tokens + k.output_tokens)}`;
+  return `<div class="head"><div><h1>Overview</h1><p>What the agent decided over the last ${o.days} days, and what its checks say about SMS delivery.</p></div>
+    <div class="field"><label for="ov-days">Period</label><select id="ov-days" data-filter="days">${[7, 14, 30].map(d => `<option value="${d}" ${String(d) === String(o.days) ? "selected" : ""}>Last ${d} days</option>`).join("")}</select></div></div>
+  <div class="stack">
+    ${S.session && S.session.anomaly && S.session.anomaly.severity !== "ok" ? `<a href="#anomalies" class="panel" style="text-decoration:none;color:inherit;border-left:4px solid ${S.session.anomaly.severity === "incident" ? "var(--crit)" : "var(--warn)"};border-radius:0 8px 8px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap">${sevPill(S.session.anomaly.severity)}<b>${esc(S.session.anomaly.headline)}</b><span class="faint">${esc(ago(S.session.anomaly.created_at))} · see Anomalies</span></a>` : ""}
+    <div class="kpis">
+      <div class="kpi"><span class="label">Tickets decided</span><b>${fmtInt(k.decided)}</b><small>${k.other_topics ? fmtInt(k.other_topics) + " found under other topics · " : ""}${fmtInt(k.deferred)} retried later</small></div>
+      <div class="kpi"><span class="label">Replied &amp; closed</span><b>${fmtInt(k.closed)}</b><small>${pct(k.closed, k.decided)} of decisions</small></div>
+      <div class="kpi"><span class="label">Asked the owner</span><b>${fmtInt(k.request_info)}</b><small>missing or wrong details</small></div>
+      <div class="kpi"><span class="label">Escalated</span><b>${fmtInt(k.escalated)}</b><small>internal note for staff</small></div>
+      <div class="kpi ${k.guardrail_changed ? "flag" : ""}"><span class="label">Safety stops</span><b>${fmtInt(k.guardrail_changed)}</b><small>proposal overruled by rules</small></div>
+      <div class="kpi ${k.fallback ? "flag" : ""}"><span class="label">Rules fallback</span><b>${fmtInt(k.fallback)}</b><small>Claude unreachable</small></div>
+      <div class="kpi ${k.emails_failed ? "flag" : ""}"><span class="label">Branch emails</span><b>${fmtInt(k.emails_sent)}</b><small>${k.emails_failed ? `${fmtInt(k.emails_failed)} failed · ` : ""}${k.emails_pending ? `${fmtInt(k.emails_pending)} waiting · ` : ""}${S.session && S.session.notify_transport === "off" ? "switched off" : "sent to ticket owners"}</small></div>
+      <div class="kpi"><span class="label">${k.est_cost != null ? "Model cost" : "Model tokens"}</span><b>${cost}</b><small>avg confidence ${k.avg_confidence == null ? "–" : Math.round(k.avg_confidence * 100) + "%"}</small></div>
+    </div>
+    <div class="grid-even">
+      <section class="panel chart"><header><div><h2>Decisions per day</h2><p>Every decision the agent made, by outcome.</p></div></header>
+        ${stackedBars(o.by_day, ACTION_SERIES, { label: "Decisions per day by outcome" })}${legend(ACTION_SERIES)}</section>
+      <section class="panel chart"><header><div><h2>SMS gateway outcomes</h2><p>What the delivery checks found, per account checked. A rise in red usually means a gateway or CAE incident, not handsets.</p></div></header>
+        ${stackedBars(o.gateway_by_day, GATEWAY_SERIES, { label: "Gateway outcomes per day" })}${legend(GATEWAY_SERIES)}
+        <div class="hops"><span>CAE request</span>→<span>render</span>→<span>dispatch</span>→<span>gateway</span>→<span>handset</span></div></section>
+    </div>
+    <div class="grid-2">
+      <section class="panel"><header><div><h2>Latest decisions</h2></div><a class="btn" href="#decisions">All decisions</a></header>
+        ${decisionsTable(o.recent)}</section>
+      <div class="stack">
+        <section class="panel"><header><div><h2>What the checks found</h2><p>Status codes across all accounts checked.</p></div></header>
+          ${barList(o.top_statuses, i => `${statusChip(i.status)} <span class="muted">${esc((STATUS[i.status] || [, ""])[1])}</span>`)}</section>
+        <section class="panel"><header><div><h2>Why safety rules stepped in</h2><p>When the model's proposal was changed before anything was posted.</p></div></header>
+          ${barList(o.guardrail_reasons, i => esc(i.reason))}</section>
+      </div>
+    </div>
+  </div>`;
+};
+
+const SEV = { ok: ["ok", "Normal"], watch: ["warn", "Watch"], incident: ["crit", "Incident"] };
+const ATTACH = { read: ["ok", "Read"], skipped: ["idle", "Skipped"], not_read: ["idle", "Not read"], failed: ["crit", "Could not read"], pending: ["idle", "Not read"] };
+const attachChip = st => { const [cls, label] = ATTACH[st] || ["idle", st]; return `<span class="pill ${cls}">${esc(label)}</span>`; };
+const fmtBytes = n => n == null ? "" : n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+const sevPill = sv => { const [cls, label] = SEV[sv] || ["idle", sv]; return `<span class="pill ${cls}"><span class="dot"></span>${esc(label)}</span>`; };
+function findingsTable(comp, emptyText) {
+  if (!comp || !comp.findings || !comp.findings.length) return `<p class="empty">${esc(emptyText)}</p>`;
+  const bar = (v, cls) => `<span class="track" style="display:inline-block;width:90px;height:6px;background:var(--surface-2);border-radius:3px;vertical-align:middle;overflow:hidden"><span class="${cls}" style="display:block;height:100%;width:${Math.round(v * 100)}%"></span></span>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Detail</th><th>Value</th><th>Share of failures</th><th>Share of deliveries</th><th class="num">More common</th></tr></thead><tbody>
+  ${comp.findings.map(f => `<tr><td>${esc(f.label)}</td><td><b>${esc(f.value)}</b></td>
+    <td class="nowrap num">${bar(f.failed_share, "f-failed")} ${Math.round(f.failed_share * 100)}% <span class="faint">(${f.failed_n})</span></td>
+    <td class="nowrap num">${bar(f.ok_share, "f-delivered")} ${Math.round(f.ok_share * 100)}%</td>
+    <td class="num">${f.ratio == null ? "only in failures" : f.ratio + "×"}</td></tr>`).join("")}</tbody></table></div>`;
+}
+/* consecutive reports with the same severity and the same set of signals form one row (history is newest first) */
+const groupReports = history => {
+  const groups = [];
+  for (const h of history) {
+    const g = groups[groups.length - 1];
+    if (g && g.newest.severity === h.severity && (g.oldest.incident_key || "") === (h.incident_key || "")) { g.items.push(h); g.oldest = h; }
+    else groups.push({ newest: h, oldest: h, items: [h] });
+  }
+  return groups;
+};
+
+PAGES.anomalies = async () => {
+  const res = await apiGet(S.id ? `/api/anomalies/${encodeURIComponent(S.id)}` : "/api/anomalies");
+  const r = res.report;
+  if (!r) return `<div class="head"><div><h1>Anomalies</h1><p>The anomaly watch has not run yet. It runs inside the agent's passes once an hour, or on demand with <span class="mono">python -m agent anomalies</span>.</p></div></div>`;
+  const sm = r.summary || {}, an = r.analysis || {}, d = r.data || {};
+  const signals = (an.signals || []).filter(x => x.value != null || x.severity !== "ok");
+  const tickets = (d.tickets && d.tickets.daily) || [];
+  const usual = d.tickets && d.tickets.baseline && d.tickets.baseline.length ? [...d.tickets.baseline].sort((a, b) => a - b)[Math.floor(d.tickets.baseline.length / 2)] : null;
+  const hourly = ((d.gateway && d.gateway.hourly) || []).slice(-48);
+  const unavailable = Object.entries(an.sources || {}).filter(([, v]) => !v.available);
+  const sevBorder = { incident: "var(--crit)", watch: "var(--warn)", ok: "var(--ok)" }[r.severity] || "var(--line)";
+  const comps = an.comparisons || {};
+  return `<div class="head"><div><h1>Anomalies</h1><p>Every hour the watch compares the last 24 hours with the usual level, for SMS Alerts ticket volume and for every hop that carries an alert, then compares the failing alerts with the delivered ones to find what they have in common.</p></div>
+    <span class="faint">Report from ${esc(when(r.created_at))}${S.id ? ` · <a href="#anomalies">latest</a>` : ""}</span></div>
+  <div class="stack">
+    <section class="panel" style="border-left:4px solid ${sevBorder};border-radius:0 8px 8px 0">
+      <header><div style="display:grid;gap:8px;justify-items:start">${sevPill(r.severity)}<h2 style="font-size:1.3rem">${esc(sm.headline || r.headline)}</h2></div>
+        <span class="faint">${sm.by === "model" ? "Explained by Claude from the numbers below" : "Plain summary"}${r.alert ? ` · admins alerted (${esc(r.alert)})` : ""}</span></header>
+      <p style="margin:0;max-width:85ch">${esc(sm.summary || "")}</p>
+    </section>
+    ${r.severity !== "ok" ? `<div class="grid-2" style="align-items:start">
+      <section class="panel"><header><h2>Likely causes</h2></header>${(sm.likely_causes || []).length ? `<ul style="margin:0;padding-left:18px;display:grid;gap:6px">${sm.likely_causes.map(c => `<li>${esc(c)}</li>`).join("")}</ul>` : `<p class="faint">None suggested.</p>`}</section>
+      <div class="stack">
+        <section class="panel"><header><h2>Next steps</h2></header>${(sm.actions || []).length ? `<ol style="margin:0;padding-left:18px;display:grid;gap:6px">${sm.actions.map(c => `<li>${esc(c)}</li>`).join("")}</ol>` : `<p class="faint">None suggested.</p>`}</section>
+        ${sm.branch_message ? `<section class="panel"><header><div><h2>Suggested note to branches</h2><p>Not sent automatically.</p></div><button class="btn" data-action="copy-branch">Copy</button></header><div class="reply" id="branch-msg">${esc(sm.branch_message)}</div></section>` : ""}
+      </div></div>` : ""}
+    <section class="panel"><header><div><h2>Signals</h2><p>Last 24 hours (today for dispatch and CAE) against the usual level over the previous ${esc(d.baseline_days || 14)} days.</p></div></header>
+      ${signals.length ? `<div class="table-wrap"><table><thead><tr><th>Signal</th><th>Now</th><th>Usual</th><th>Status</th><th>Detail</th></tr></thead><tbody>
+      ${signals.map(x => `<tr><td>${esc(x.label)}</td><td class="num"><b>${esc(x.value == null ? "" : x.value)}</b></td><td class="num">${esc(x.usual == null ? "" : x.usual)}</td><td>${sevPill(x.severity)}</td><td class="muted">${esc(x.detail)}</td></tr>`).join("")}</tbody></table></div>`
+      : `<p class="empty">Not enough data yet to compare.</p>`}
+      ${unavailable.length ? `<p class="faint" style="margin-bottom:0">Could not check: ${unavailable.map(([k, v]) => `${esc(k)} (${esc(v.error || "unavailable")})`).join("; ")}</p>` : ""}
+    </section>
+    <section class="panel"><header><div><h2>What is different about the failing alerts</h2><p>At the gateway: ${fmtInt((comps.gateway || {}).failed_n)} failed or stuck sends compared with ${fmtInt((comps.gateway || {}).delivered_n)} delivered ones from the same 24 hours. A detail that is much more common among failures points at the cause.</p></div></header>
+      ${findingsTable(comps.gateway, "Nothing stands out: failing and delivered alerts look alike.")}
+      ${((comps.gateway || {}).errors || []).length ? `<p class="muted" style="margin:12px 0 0">Most common provider errors among the failures: ${comps.gateway.errors.map(e => `<b>${esc(e.value)}</b> ${Math.round(e.failed_share * 100)}%`).join(" · ")}</p>` : ""}</section>
+    <section class="panel"><header><div><h2>Same comparison for the tickets the agent checked</h2><p>${fmtInt((comps.tickets || {}).failed_n)} accounts whose alerts did not reach the client, compared with ${fmtInt((comps.tickets || {}).delivered_n)} whose alerts were delivered.</p></div></header>
+      ${findingsTable(comps.tickets, "Not enough checked tickets in the window, or nothing stands out.")}</section>
+    <div class="grid-even">
+      <section class="panel chart"><header><div><h2>SMS Alerts tickets per day</h2><p>Dashed line: the usual number per 24 hours.</p></div></header>
+        ${tickets.length ? stackedBars(tickets.map(t => ({ day: t.day, count: t.count })), [{ key: "count", label: "Tickets", fill: "f-esc" }], { label: "Tickets per day", refLine: usual }) : `<p class="empty">No ticket data.</p>`}</section>
+      <section class="panel chart"><header><div><h2>Gateway outcomes, last 48 hours</h2><p>Per hour, from the SMS gateway's own records.</p></div></header>
+        ${hourly.length ? stackedBars(hourly.map(h => ({ ...h, day: h.hour })), [{ key: "delivered", label: "Delivered", fill: "f-delivered" }, { key: "pending", label: "Awaiting delivery", fill: "f-queued" }, { key: "failed", label: "Failed", fill: "f-failed" }],
+          { label: "Gateway outcomes per hour", labelFn: rr => rr.hour.slice(11, 13) + "h" }) + legend([{ label: "Delivered", fill: "f-delivered" }, { label: "Awaiting delivery", fill: "f-queued" }, { label: "Failed", fill: "f-failed" }]) : `<p class="empty">Gateway data unavailable.</p>`}</section>
+    </div>
+    <section class="panel"><header><div><h2>Recent reports</h2><p>One report an hour; consecutive reports about the same thing are grouped. Open one to see that hour's analysis.</p></div></header>
+      <div class="table-wrap"><table><thead><tr><th>From</th><th>To</th><th class="num">Reports</th><th>Status</th><th>Latest headline</th><th>Admin alerts</th></tr></thead><tbody>
+      ${groupReports(res.history).map(g => `<tr class="click ${String(g.newest.id) === String(r.id) ? "sel" : ""}" data-href="#anomaly-${g.newest.id}"><td class="nowrap num">${esc(when(g.oldest.created_at))}</td><td class="nowrap num">${g.items.length > 1 ? esc(when(g.newest.created_at)) : ""}</td><td class="num">${g.items.length}</td><td>${sevPill(g.newest.severity)}</td><td>${esc(g.newest.headline)}</td><td class="muted">${esc(g.items.map(h => h.alert).filter(Boolean).reverse().join(", "))}</td></tr>`).join("")}</tbody></table></div></section>
+  </div>`;
+};
+
+PAGES.queue = async () => {
+  const q = await apiGet("/api/queue");
+  const counts = q.counts || {};
+  $("#nav-queue").textContent = q.items.length || "";
+  const stateCell = it => {
+    if (ACTIONS[it.state]) return actionPill(it.state);
+    if (it.state === "skipped") return `<span class="pill idle">Skipped</span>`;
+    if (it.state === "error") return `<span class="pill crit">Error</span>`;
+    return `<span class="pill outline">${esc(it.state)}</span>`;
+  };
+  const summaryChips = Object.entries(counts).map(([k, v]) => `<span class="pill ${ACTIONS[k] ? ACTIONS[k].cls : k === "error" ? "crit" : "outline"}">${esc(ACTIONS[k] ? ACTIONS[k].short : k)} · ${v}</span>`).join(" ");
+  return `<div class="head"><div><h1>Open tickets</h1><p>Every open SMS Alerts ticket, plus SMS alerts issues found under other topics, as of the last full pass${q.as_of ? ` (${esc(when(q.as_of.finished_at || q.as_of.started_at))}, ${esc(ago(q.as_of.finished_at || q.as_of.started_at))})` : ""}, and what the agent did with it.</p></div>
+    <div class="chips">${summaryChips}</div></div>
+  <section class="panel">${q.items.length ? `<div class="table-wrap"><table><thead><tr><th>Ticket</th><th>Help topic</th><th>Opened</th><th>This pass</th><th>Why</th><th>Checks found</th></tr></thead><tbody>
+    ${q.items.map(it => `<tr ${it.decision_id ? `class="click" data-href="#decision-${it.decision_id}"` : ""}>
+      <td>${ticketLink(it.ticket_number, it.ticket_id)}</td><td>${esc(it.help_topic)}</td><td class="nowrap num">${esc(when(it.opened))}</td>
+      <td>${stateCell(it)}</td><td class="muted">${esc(it.detail || (it.final_action ? (ACTIONS[it.final_action] || {}).label : ""))}</td><td>${statusChips(it.statuses)}</td></tr>`).join("")}
+  </tbody></table></div>` : `<p class="empty">No open SMS Alerts tickets at the last pass.</p>`}</section>`;
+};
+
+PAGES.decisions = async () => {
+  const f = S.filters;
+  const qs = new URLSearchParams({ ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)), limit: 50, offset: S.offset });
+  const res = await apiGet(`/api/decisions?${qs}`);
+  const opt = (pairs, val) => pairs.map(([v, l]) => `<option value="${esc(v)}" ${v === val ? "selected" : ""}>${esc(l)}</option>`).join("");
+  const exportHref = SERVED ? `/api/export/decisions.csv?${new URLSearchParams(Object.fromEntries(Object.entries(f).filter(([, v]) => v)))}` : null;
+  return `<div class="head"><div><h1>Decisions</h1><p>Every decision the agent recorded. Customer numbers are masked in this log; open a decision to see the reasoning and review it.</p></div>
+    ${exportHref ? `<a class="btn" href="${esc(exportHref)}">Export CSV</a>` : `<span class="faint" title="Export works on the portal server">Export CSV (on the server)</span>`}</div>
+  <form class="filters" id="filters">
+    <div class="field"><label for="f-days">Period</label><select id="f-days" data-filter="days">${opt([["1", "Today"], ["7", "7 days"], ["14", "14 days"], ["30", "30 days"], ["90", "90 days"]], f.days)}</select></div>
+    <div class="field"><label for="f-action">Outcome</label><select id="f-action" data-filter="action">${opt([["", "Any"], ...Object.entries(ACTIONS).map(([k, v]) => [k, v.label])], f.action)}</select></div>
+    <div class="field"><label for="f-status">Check status</label><select id="f-status" data-filter="status">${opt([["", "Any"], ...Object.keys(STATUS).map(k => [k, k])], f.status)}</select></div>
+    <div class="field"><label for="f-mode">Mode</label><select id="f-mode" data-filter="mode">${opt([["", "Live, notes & shadow"], ["live", "Live"], ["notes", "Notes"], ["shadow", "Shadow"], ["audit", "Audit replays"]], f.mode)}</select></div>
+    <div class="field"><label for="f-flag">Flag</label><select id="f-flag" data-filter="flag">${opt([["", "Any"], ["guardrail", "Safety stop"], ["fallback", "Rules fallback"], ["error", "Error"]], f.flag)}</select></div>
+    <div class="field"><label for="f-review">Review</label><select id="f-review" data-filter="review">${opt([["", "Any"], ["unreviewed", "Not reviewed"], ["correct", "Marked correct"], ["incorrect", "Marked wrong"]], f.review)}</select></div>
+    <div class="field"><label for="f-q">Ticket number</label><input id="f-q" type="search" data-filter="q" value="${esc(f.q)}" placeholder="e.g. 4829" inputmode="numeric" autocomplete="off"></div>
+  </form>
+  <section class="panel">${decisionsTable(res.items, { mode: true })}
+    <div class="pager"><span class="num">${res.total ? `${res.offset + 1}–${Math.min(res.offset + res.limit, res.total)} of ${fmtInt(res.total)}` : ""}</span>
+      <button class="btn" data-page="-1" ${res.offset <= 0 ? "disabled" : ""}>Newer</button>
+      <button class="btn" data-page="1" ${res.offset + res.limit >= res.total ? "disabled" : ""}>Older</button></div></section>`;
+};
+
+function transcriptHtml(t) {
+  if (!t || !t.length) return `<p class="faint">No model conversation (rules fallback or an automatic follow-up).</p>`;
+  const parts = [];
+  t.forEach((m, i) => {
+    const blocks = typeof m.content === "string" ? [{ type: "text", text: m.content }] : (m.content || []);
+    blocks.forEach(b => {
+      if (b.type === "text") {
+        const who = m.role === "assistant" ? `<span class="role model">Model</span>` : `<span class="role">${i === 0 ? "Ticket as the model saw it" : "Agent"}</span>`;
+        parts.push(`<details class="msg" ${i === 0 ? "" : "open"}><summary>${who}</summary><pre>${tokens(b.text)}</pre></details>`);
+      } else if (b.type === "tool_use") {
+        parts.push(`<details class="msg" open><summary><span class="role model">Model called</span> <span class="mono">${esc(b.name)}</span></summary><pre>${tokens(JSON.stringify(b.input, null, 2))}</pre></details>`);
+      } else if (b.type === "tool_result") {
+        let body = b.content;
+        try { body = JSON.stringify(JSON.parse(b.content), null, 2); } catch (_) { /* plain text */ }
+        parts.push(`<details class="msg"><summary><span class="role ${b.is_error ? "err" : "tool"}">${b.is_error ? "Tool error" : "Tool result"}</span></summary><pre>${tokens(body)}</pre></details>`);
+      }
+    });
+  });
+  return parts.join("");
+}
+
+PAGES.decision = async () => {
+  const d = await apiGet(`/api/decisions/${encodeURIComponent(S.id)}`);
+  const accounts = Object.entries(d.statuses || {});
+  const canReview = !!S.session;
+  const replyLabel = { live: "Posted to the ticket", notes: "Proposed in a staff note", shadow: "Would have posted (shadow)", audit: "Agent's reply in the replay" }[d.mode] || "Reply";
+  return `<div class="head"><div>
+      <a href="#decisions" class="faint">← Decisions</a>
+      <h1 style="margin-top:6px">Ticket ${ticketLink(d.ticket_number, d.ticket_id)}</h1>
+      <p>${esc(when(d.created_at))} · ${modeChip(d.mode)} · run <span class="mono">${esc(d.run_id)}</span></p></div>
+    <div class="big-state">${d.error ? `<span class="pill crit">Error</span>` : actionPill(d.final_action)}
+      ${d.guardrail_changed ? `<span class="faint">model proposed</span> ${actionPill(d.proposed_action)}` : ""}</div></div>
+  <div class="grid-2">
+    <div class="stack">
+      ${d.error ? `<div class="error-box"><b>The agent could not finish this ticket.</b><br>${esc(d.error)}</div>` : ""}
+      ${(d.guardrail_notes || []).length ? `<div class="note"><b>Safety rules:</b> ${d.guardrail_notes.map(n => tokens(n)).join("<br>")}</div>` : ""}
+      ${d.approval ? `<div class="why-box"><b>${esc(APPROVAL_STATES[d.approval.status] || d.approval.status)}.</b> ${tokens(d.approval.why || "")}${d.approval.decided_by ? ` · ${esc(d.approval.decided_by)} ${esc(when(d.approval.decided_at))}` : ""}${d.approval.comment ? `<br>${esc(d.approval.comment)}` : ""}${d.approval.status === "pending" ? ` <a href="#approvals">Open the approval desk</a>` : ""}</div>`
+        : d.approval_note ? `<div class="why-box">${esc(d.approval_note)}</div>` : ""}
+      <section class="panel"><header><h2>What the checks found</h2></header>
+        ${accounts.length ? accounts.map(([acct, st]) => `<div class="acct"><div>${tokens(acct)} ${statusChip(st)}</div><div class="muted">${esc((STATUS[st] || [, ""])[1])}</div></div>`).join("")
+          : `<p class="faint">No account was checked.</p>`}
+        ${(d.tools_used || []).length ? `<p class="faint" style="margin-bottom:0">Tools used: ${d.tools_used.map(t => `<span class="mono">${esc(t)}</span>`).join(", ")}</p>` : ""}
+      </section>
+      ${(d.attachments || []).length ? `<section class="panel"><header><div><h2>Attachments</h2><p>What the agent was shown from each file on the ticket. Images and PDFs are read by the model in a separate call that sees the file itself.</p></div></header>
+        <div class="stack">${d.attachments.map(a => `<div class="attachment"><div><span class="mono">${a.number}.</span> <b>${tokens(a.name)}</b> <span class="faint">${esc(a.type || "")} · ${esc(fmtBytes(a.size))}</span> ${attachChip(a.status)}</div>
+          ${a.status === "read" ? `<div class="label" style="margin-top:6px">${esc(a.kind || "")}</div><div class="reply" style="white-space:pre-wrap">${tokens(a.summary || "nothing relevant found")}</div>` : `<div class="muted">${esc(a.note || "")}</div>`}</div>`).join("")}</div></section>` : ""}
+      ${d.reply_text ? `<section class="panel"><header><h2>${esc(replyLabel)}</h2><p>Masked values are filled in with the real numbers when posted.</p></header>
+        <div class="reply ${d.mode === "live" && (d.executed || []).includes("reply") ? "posted" : ""}">${tokens(d.reply_text)}</div></section>` : ""}
+      ${d.template_reply || d.actual_reply ? `<section class="panel"><header><h2>Compare</h2></header><div class="stack">
+        ${d.template_reply ? `<div><div class="label">Standard wording (the old Java reply)</div><div class="reply">${tokens(d.template_reply)}</div></div>` : ""}
+        ${d.actual_reply ? `<div><div class="label">Actually posted on the ticket</div><div class="reply">${tokens(d.actual_reply)}</div></div>` : ""}</div></section>` : ""}
+      <section class="panel"><header><h2>Reasoning</h2></header>
+        <p style="margin-top:0">${tokens(d.reason || "–")}</p>
+        ${(d.evidence || []).length ? `<ul>${d.evidence.map(e => `<li>${tokens(e)}</li>`).join("")}</ul>` : ""}</section>
+      <section class="panel"><header><div><h2>Conversation with the model</h2><p>Exactly what was sent and received. Customer numbers in it were masked before leaving the server.</p></div></header>
+        ${transcriptHtml(d.transcript)}</section>
+    </div>
+    <div class="stack">
+      <section class="panel"><header><h2>Details</h2></header><dl class="dl">
+        <dt>Confidence</dt><dd class="num">${d.confidence == null ? "–" : Math.round(d.confidence * 100) + "%"}<span class="meter"><i style="width:${Math.round((d.confidence || 0) * 100)}%"></i></span></dd>
+        <dt>Category</dt><dd class="mono">${esc(d.category || "–")}</dd>
+        <dt>Written</dt><dd>${(d.executed || []).length ? d.executed.map(x => `<span class="chip">${esc(x)}</span>`).join(" ") : `<span class="faint">nothing (${esc(d.mode)})</span>`}</dd>
+        <dt>Tokens</dt><dd class="num">${fmtInt(d.input_tokens)} in · ${fmtInt(d.output_tokens)} out</dd>
+        <dt>Retry</dt><dd>${d.deferred ? "yes, deferred to the next pass" : "no"}</dd>
+        <dt>Branch email</dt><dd>${(d.notifications || []).length ? d.notifications.map(n => `${mailChip(n.status)} <span class="muted">${esc(n.recipient || "no address")}</span>${n.last_error ? `<div class="faint">${esc(n.last_error)}</div>` : ""}`).join("<br>") : `<span class="faint">none</span>`}</dd>
+      </dl></section>
+      <section class="panel"><header><div><h2>Review</h2><p>Was this the right call? Reviews feed the quality numbers and prompt fixes.</p></div></header>
+        ${canReview ? `<form class="review-box" id="review-form" data-id="${esc(d.id)}">
+          <div class="seg" role="radiogroup" aria-label="Verdict">
+            <label><input type="radio" name="verdict" value="correct" id="rv-ok"><span>Correct</span></label>
+            <label><input type="radio" name="verdict" value="incorrect" id="rv-bad"><span>Wrong</span></label></div>
+          <div class="field" id="rv-expected" hidden><label for="rv-action">It should have</label>
+            <select id="rv-action" name="expected_action"><option value="">–</option>${Object.entries(ACTIONS).map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join("")}</select></div>
+          <div class="field"><label for="rv-comment">Comment</label><textarea id="rv-comment" name="comment" maxlength="2000" placeholder="What should it have done or said?"></textarea></div>
+          <div><button class="btn primary" type="submit">Save review</button></div></form>` : ""}
+        ${(d.reviews || []).map(r => `<div class="review-item"><span class="chip ${r.verdict === "correct" ? "ok" : "crit"}">${esc(r.verdict)}</span>
+          ${r.expected_action ? ` should have: <b>${esc((ACTIONS[r.expected_action] || {}).label || r.expected_action)}</b>` : ""}
+          <span class="faint"> · ${esc(r.reviewer)} · ${esc(when(r.created_at))}</span>${r.comment ? `<div>${esc(r.comment)}</div>` : ""}</div>`).join("")}
+      </section>
+      ${(d.history || []).length ? `<section class="panel"><header><h2>Earlier on this ticket</h2></header>${decisionsTable(d.history)}</section>` : ""}
+    </div>
+  </div>`;
+};
+
+PAGES.review = async () => {
+  const q = await apiGet("/api/quality?days=30");
+  $("#nav-review").textContent = q.needs_review.length || "";
+  const a = q.audit;
+  return `<div class="head"><div><h1>Review</h1><p>How often the agent is right, according to the people who reviewed it, and the decisions that most need a second look.</p></div></div>
+  <div class="stack">
+    <div class="kpis">
+      <div class="kpi"><span class="label">Reviewed (30 days)</span><b>${fmtInt(q.reviewed)}</b><small>${fmtInt(q.incorrect)} marked wrong</small></div>
+      <div class="kpi"><span class="label">Right call</span><b>${q.accuracy == null ? "–" : Math.round(q.accuracy * 100) + "%"}</b><small>of reviewed decisions</small></div>
+      <div class="kpi"><span class="label">Waiting for review</span><b>${fmtInt(q.needs_review.length)}</b><small>flagged below</small></div>
+      <div class="kpi"><span class="label">Audit replays</span><b>${fmtInt(a.tickets)}</b><small>closed tickets re-run</small></div>
+      <div class="kpi"><span class="label">Same reply as posted</span><b>${pct(a.agent_same_as_actual, a.tickets)}</b><small>standard wording ${pct(a.template_same_as_actual, a.tickets)}</small></div>
+    </div>
+    <div class="grid-2">
+      <section class="panel"><header><div><h2>Needs a second look</h2><p>Not reviewed yet: safety stops first, then the least confident, then escalations and requests.</p></div></header>
+        ${decisionsTable(q.needs_review, { empty: "Nothing waiting. Every flagged decision has been reviewed." })}</section>
+      <div class="stack">
+        <section class="panel"><header><h2>Right call by outcome</h2></header>
+          ${q.by_action.length ? `<div class="table-wrap"><table><thead><tr><th>Outcome</th><th>Reviewed</th><th>Right</th></tr></thead><tbody>
+          ${q.by_action.map(r => `<tr><td>${actionPill(r.action)}</td><td class="num">${r.reviewed}</td><td class="num">${pct(r.correct, r.reviewed)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="empty">No reviews yet.</p>`}</section>
+        <section class="panel"><header><div><h2>Most common corrections</h2><p>What reviewers said it should have done instead.</p></div></header>
+          ${barList(q.corrections, i => `${esc((ACTIONS[i.agent] || {}).short || i.agent)} → <b>${esc((ACTIONS[i.expected] || {}).label || i.expected)}</b>`)}</section>
+        <section class="panel"><header><div><h2>Closed-ticket replays</h2><p>From <span class="mono">python -m agent audit</span>: what the agent would have done on tickets that are already closed.</p></div></header>
+          ${a.tickets ? barList(Object.entries(a.actions).map(([k, v]) => ({ k, count: v })), i => actionPill(i.k)) : `<p class="empty">No replays in the last 30 days.</p>`}</section>
+      </div>
+    </div>
+  </div>`;
+};
+
+PAGES.emails = async () => {
+  const st = S.mailStatus || "";
+  const r = await apiGet(`/api/notifications?days=30${st ? `&status=${encodeURIComponent(st)}` : ""}`);
+  const c = r.counts || {};
+  $("#nav-emails").textContent = c.failed || "";
+  const kinds = { request_info: "Asked for information", reply_and_close: "Resolved and closed", admin_incident: "Admin alert: incident", admin_update: "Admin alert: incident changed", admin_reminder: "Admin alert: still open", admin_resolved: "Admin alert: resolved" };
+  const off = r.transport === "off";
+  return `<div class="head"><div><h1>Emails &amp; alerts</h1><p>The agent writes its replies straight into osTicket, which sends no alert of its own, so it emails the person who raised the ticket. Anomaly-watch alerts to admins are listed here too. Failed messages are retried on the next passes.</p></div>
+    ${r.can_retry && r.retryable ? `<button class="btn primary" data-action="retry-mail">Re-send ${r.retryable} failed</button>` : ""}</div>
+  ${off ? `<div class="demo-banner"><b>Emails are switched off.</b> Branches are not told when the agent replies or asks them a question. Set <span class="mono">NOTIF_EMAIL_URL</span> (the notification gateway) or <span class="mono">NOTIFY_TRANSPORT=smtp</span> on the server.</div>` : ""}
+  <div class="kpis" style="margin-bottom:18px">
+    <div class="kpi"><span class="label">Sent (30 days)</span><b>${fmtInt(c.sent || 0)}</b><small>via ${esc(r.transport)}</small></div>
+    <div class="kpi ${c.pending ? "flag" : ""}"><span class="label">Waiting</span><b>${fmtInt(c.pending || 0)}</b><small>go out on the next pass</small></div>
+    <div class="kpi ${c.failed ? "flag" : ""}"><span class="label">Failed</span><b>${fmtInt(c.failed || 0)}</b><small>gave up after repeated tries</small></div>
+    <div class="kpi"><span class="label">Not sent</span><b>${fmtInt(c.skipped || 0)}</b><small>owner has no email</small></div>
+  </div>
+  <div class="filters"><div class="field"><label for="mail-status">Status</label><select id="mail-status" data-mail-filter="1">
+    ${[["", "All"], ["sent", "Sent"], ["pending", "Waiting"], ["failed", "Failed"], ["skipped", "Not sent"]].map(([v, l]) => `<option value="${v}" ${v === st ? "selected" : ""}>${l}</option>`).join("")}</select></div></div>
+  <section class="panel">${r.items.length ? `<div class="table-wrap"><table><thead><tr><th>Queued</th><th>About</th><th>Message</th><th>To</th><th>Status</th><th class="num">Tries</th><th>Sent</th></tr></thead><tbody>
+    ${r.items.map(n => `<tr ${n.decision_id ? `class="click" data-href="#decision-${n.decision_id}"` : ""}><td class="nowrap num">${esc(when(n.created_at))}</td><td>${n.ticket_number ? ticketLink(n.ticket_number, n.ticket_id) : `<a href="#anomalies">anomaly</a>`}</td>
+      <td>${esc(kinds[n.kind] || n.kind)}${n.channel === "sms" ? ` <span class="faint">· SMS</span>` : ""}<div class="faint">${esc(n.subject || "")}</div></td>
+      <td>${esc(n.recipient || "–")}${n.cc ? `<div class="faint">cc ${esc(n.cc)}</div>` : ""}</td>
+      <td>${mailChip(n.status)}${n.last_error ? `<div class="faint">${esc(n.last_error)}</div>` : ""}</td>
+      <td class="num">${fmtInt(n.attempts)}</td><td class="nowrap num">${esc(n.sent_at ? when(n.sent_at) : "–")}</td></tr>`).join("")}
+  </tbody></table></div>` : `<p class="empty">No emails or alerts in the last 30 days.</p>`}</section>`;
+};
+
+PAGES.runs = async () => {
+  const r = await apiGet("/api/runs?limit=60");
+  const items = r.items;
+  const stale = S.health && S.health.stale;
+  return `<div class="head"><div><h1>Runs</h1><p>Each pass over the open tickets. The timer starts one every 15 minutes; a gap longer than ${esc(S.session.stale_after_minutes)} minutes turns the health strip red.</p></div>
+    ${stale ? `<span class="pill crit"><span class="dot"></span>No recent pass</span>` : ""}</div>
+  <section class="panel" style="margin-bottom:18px"><header><div><h2>Right now</h2><p>What the agent is doing, step by step, while a pass runs. Numbers are masked.</p></div></header><div id="live-panel">${livePanel()}</div></section>
+  <section class="panel">${items.length ? `<div class="table-wrap"><table><thead><tr><th>Started</th><th>Mode</th><th class="num">Duration</th><th class="num">Tickets seen</th><th class="num">Decided</th><th class="num">Errors</th><th>Run</th></tr></thead><tbody>
+    ${items.map(x => `<tr><td class="nowrap num">${esc(when(x.started_at))}</td><td>${modeChip(x.mode)}</td>
+      <td class="num">${x.finished_at ? (x.duration_s == null ? "–" : x.duration_s < 90 ? x.duration_s + " s" : Math.round(x.duration_s / 60) + " min") : `<span class="pill ok">running</span>`}</td>
+      <td class="num">${fmtInt(x.tickets_seen)}</td><td class="num">${fmtInt(x.decisions)}</td>
+      <td class="num">${x.errors ? `<span class="chip crit">${x.errors}</span>` : "0"}</td><td class="mono faint">${esc(x.run_id)}</td></tr>`).join("")}
+  </tbody></table></div>` : `<p class="empty">No runs recorded yet. Start the timer, or run <span class="mono">python -m agent run</span> once.</p>`}</section>`;
+};
+
+PAGES.controls = async () => {
+  const c = await apiGet("/api/controls");
+  const dis = c.can_edit ? "" : "disabled";
+  const holdOpt = (v, label, help) => `<label><input type="radio" name="hold" value="${v}" ${(c.mode_override || "") === v ? "checked" : ""} ${dis} id="hold-${v || "none"}"><span>${label}</span></label>`;
+  return `<div class="head"><div><h1>Controls</h1><p>Stop the agent, or hold it in a safer mode while you investigate. These controls can only make it more careful. Turning live mode on is done in the server's configuration.</p></div></div>
+  ${c.can_edit ? "" : `<div class="demo-banner">You can see the controls but only admins can change them.</div>`}
+  <div class="grid-2">
+    <div class="stack">
+      <section class="panel control"><header><div><h2>Pause the agent</h2><p>A paused agent starts no new passes and stops after the ticket it is working on.</p></div></header>
+        <div class="big-state">${c.kill_switch ? `<span class="pill warn"><span class="dot"></span>Paused</span><b>Not processing tickets</b>` : `<span class="pill ok"><span class="dot"></span>Active</span><b>Processing every 15 minutes</b>`}</div>
+        <div class="field"><label for="ctl-note">Reason (kept in the log below)</label><input type="text" id="ctl-note" maxlength="300" placeholder="e.g. gateway incident INC-2231" ${dis}></div>
+        <div id="pause-zone">${c.kill_switch
+          ? `<button class="btn good" data-action="resume" ${dis}>Resume the agent</button>`
+          : `<button class="btn danger" data-action="ask-pause" ${dis}>Pause the agent…</button>`}</div>
+      </section>
+      <section class="panel control"><header><div><h2>Hold the mode</h2><p>Configured mode is ${modeChip(c.configured_mode)}; the agent is running as ${modeChip(c.effective_mode)}.</p></div></header>
+        <div class="seg" role="radiogroup" aria-label="Mode hold">${holdOpt("", "No hold")}${holdOpt("notes", "Notes only")}${holdOpt("shadow", "Shadow")}</div>
+        <p class="muted" style="margin:0">Notes only: the agent writes its recommendation as an internal note and changes nothing else. Shadow: it decides and logs, and writes nothing to osTicket.</p>
+        <div><button class="btn primary" data-action="save-hold" ${dis}>Save mode hold</button></div>
+      </section>
+    </div>
+    <section class="panel"><header><div><h2>Control log</h2><p>Who paused, resumed or held the agent, and why.</p></div></header>
+      ${c.events.length ? `<div class="table-wrap"><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Reason</th></tr></thead><tbody>
+      ${c.events.map(e => `<tr><td class="nowrap num">${esc(when(e.created_at))}</td><td>${esc(e.actor)}</td><td><b>${esc(e.action)}</b></td><td class="muted">${esc(e.detail || "")}</td></tr>`).join("")}</tbody></table></div>`
+      : `<p class="empty">No control changes yet.</p>`}</section>
+  </div>`;
+};
+
+/* ---------------- approval desk ---------------- */
+const APPROVAL_STATES = { pending: "Waiting for approval", approved: "Approved; posted on the agent's next pass", rejected: "Rejected; an escalation note follows on the next pass",
+  posted: "Approved and posted", escalated: "Rejected; escalation note posted", dropped: "Dropped", failed: "Could not be posted" };
+const APPROVAL_CLS = { pending: "ask", approved: "ok", rejected: "crit", posted: "ok", escalated: "crit", dropped: "idle", failed: "crit" };
+const approvalChip = st => `<span class="chip ${APPROVAL_CLS[st] || ""}">${esc(st)}</span>`;
+
+PAGES.approvals = async () => {
+  const a = await apiGet("/api/approvals");
+  S.appr = a;
+  const items = a.pending;
+  if (!items.find(x => String(x.id) === String(S.apprSel))) S.apprSel = items.length ? items[0].id : null;
+  const sel = items.find(x => String(x.id) === String(S.apprSel));
+  const det = sel ? await apiGet(`/api/decisions/${encodeURIComponent(sel.decision_id)}`) : null;
+  S.apprEdit = false; S.apprConfirm = null;
+  const mode = a.approval_mode;
+  const intro = mode === "all" ? "Every reply waits for approval (APPROVAL_MODE=all)."
+    : mode === "off" ? "Approval is off (APPROVAL_MODE=off): the agent posts on its own."
+    : "Standard outcomes are posted on their own; replies the agent reached another way wait here.";
+  return `<div class="head"><div><h1>Approvals</h1><p>${intro} An approved reply is posted on the agent's next pass, as long as the ticket hasn't changed.</p></div>
+    <span class="faint" style="font-size:.8rem"><kbd>J</kbd> <kbd>K</kbd> move · <kbd>A</kbd> approve · <kbd>E</kbd> edit · <kbd>X</kbd> reject · <kbd>?</kbd> keys</span></div>
+  ${a.can_decide ? "" : `<div class="demo-banner">You can see what is waiting; only admins can approve or reject.</div>`}
+  <div class="desk">
+    <div class="desk-col desk-side">
+      <section class="panel"><header><div><h2>Waiting</h2>${items.length ? `<p>${items.length} repl${items.length === 1 ? "y" : "ies"}, oldest first</p>` : ""}</div></header>
+        ${items.length ? `<div class="qlist" id="qlist">${items.map(x => qItem(x, sel)).join("")}</div>` : `<p class="empty">Nothing is waiting.</p>`}</section>
+      <section class="panel"><header><h2>Recently decided</h2></header>${recentApprovals(a.decided)}</section>
+    </div>
+    ${sel ? `<div class="desk-col">${traceHtml(det)}</div><div class="desk-col desk-right desk-side" id="proposal">${proposalHtml(det, sel, a.can_decide)}</div>`
+      : `<div class="desk-col"><section class="panel"><p class="empty">When a reply needs a person, it shows here with every step the agent took to reach it.</p></section></div>`}
+  </div>`;
+};
+function qItem(x, sel) {
+  return `<button class="qitem" type="button" data-appr="${esc(x.id)}" aria-current="${sel && sel.id === x.id ? "true" : "false"}">
+    <span class="top"><span class="mono" style="font-weight:600">#${esc(x.ticket_number)}</span>${actionPill(x.action)}</span>
+    <span class="why">${tokens(x.why || "")}</span>
+    <span class="faint" style="font-size:.72rem">${esc(ago(x.created_at))} · ${x.confidence == null ? "–" : Math.round(x.confidence * 100) + "%"}</span></button>`;
+}
+function recentApprovals(items) {
+  if (!items.length) return `<p class="empty">None in the last 7 days.</p>`;
+  return `<div class="table-wrap"><table><tbody>${items.slice(0, 20).map(x => `<tr class="click" data-href="#decision-${x.decision_id}">
+    <td class="mono">#${esc(x.ticket_number)}</td><td>${approvalChip(x.status)}${x.edited ? ` <span class="chip">edited</span>` : ""}</td>
+    <td class="faint">${esc(x.decided_by || "")}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function traceSteps(t) {
+  const results = {};
+  (t || []).forEach(m => (typeof m.content === "string" ? [] : m.content || []).forEach(b => { if (b.type === "tool_result") results[b.tool_use_id] = b; }));
+  const steps = [];
+  (t || []).forEach(m => {
+    if (m.role !== "assistant") return;
+    (m.content || []).forEach(b => {
+      if (b.type === "text" && b.text.trim()) steps.push({ kind: "think", text: b.text });
+      if (b.type === "tool_use" && b.name !== "submit_decision") steps.push({ kind: "tool", name: b.name, input: b.input, result: results[b.id] });
+      if (b.type === "tool_use" && b.name === "submit_decision") steps.push({ kind: "decide", input: b.input });
+    });
+  });
+  return steps;
+}
+function pretty(content) { try { return JSON.stringify(JSON.parse(content), null, 2); } catch (_) { return String(content || ""); } }
+function traceHtml(d) {
+  const first = (d.transcript || [])[0];
+  const ticketText = first ? (typeof first.content === "string" ? first.content : (first.content || []).map(b => b.text || "").join("\n")) : "";
+  const topic = (ticketText.match(/Help topic: ([^\n]+?)(?:\s{2,}|\n|$)/) || [])[1] || "";
+  const steps = traceSteps(d.transcript);
+  return `<section class="panel"><header><div><h2>Ticket ${ticketLink(d.ticket_number, d.ticket_id)}</h2><p>${topic ? `${esc(topic)} · ` : ""}decided ${esc(when(d.created_at))} · <a href="#decision-${d.id}">full decision</a></p></div></header>
+      ${statusChips(d.statuses)}
+      ${ticketText ? `<details class="msg"><summary><span class="role">The ticket as the agent read it</span></summary><pre>${tokens(ticketText)}</pre></details>` : ""}</section>
+    <section class="panel"><header><div><h2>How the agent got here</h2><p>Each lookup it chose, what it sent and what came back. Numbers are masked.</p></div></header>
+      ${steps.length ? `<div class="steps">${steps.map((st, i) => stepHtml(st, i + 1)).join("")}</div>` : `<p class="faint">No model conversation was recorded.</p>`}</section>
+    <section class="panel"><header><h2>Reasoning</h2></header><p style="margin-top:0">${tokens(d.reason || "–")}</p>
+      ${(d.evidence || []).length ? `<ul style="margin-bottom:0">${d.evidence.map(e => `<li>${tokens(e)}</li>`).join("")}</ul>` : ""}</section>`;
+}
+function stepHtml(st, n) {
+  if (st.kind === "think") return `<div class="step think"><span class="n">${n}</span><div class="body"><p>${tokens(st.text)}</p></div></div>`;
+  if (st.kind === "decide") {
+    const x = st.input || {};
+    return `<div class="step think"><span class="n">${n}</span><div class="body"><p><b>Decided</b> ${actionPill(x.action)} <span class="faint">${x.confidence == null ? "" : Math.round(x.confidence * 100) + "% confident"}${x.follows_standard_outcome === false ? " · says it went beyond the standard check" : ""}</span></p></div></div>`;
+  }
+  const failed = st.result && st.result.is_error;
+  return `<div class="step ${failed ? "fail" : "tool"}"><span class="n">${n}</span><div class="body"><p><span class="mono" style="font-weight:600">${esc(st.name)}</span>${failed ? ` <span class="chip crit">error</span>` : ""}</p>
+    <div class="io"><div><div class="label">Sent</div><pre>${tokens(JSON.stringify(st.input || {}, null, 2))}</pre></div>
+    <div><div class="label">Came back</div><pre>${st.result ? tokens(pretty(st.result.content)) : "–"}</pre></div></div></div></div>`;
+}
+function proposalHtml(d, a, canDecide) {
+  const dis = canDecide ? "" : "disabled";
+  const conf = d.confidence == null ? 0 : Math.round(d.confidence * 100);
+  return `<section class="panel" style="display:grid;gap:12px"><header style="margin-bottom:0"><h2>Proposed reply</h2>${actionPill(a.action)}</header>
+    <div class="dl" style="grid-template-columns:max-content 1fr"><span class="faint">Confidence</span><span class="num">${conf}%<span class="meter"><i style="width:${conf}%"></i></span></span></div>
+    <div class="why-box"><b>Why it waits:</b> ${tokens(a.why || "")}</div>
+    <div><div class="label" style="margin-bottom:4px">To the branch${a.action === "reply_and_close" ? ", then the ticket closes" : ", ticket stays open"}</div>
+      <div class="reply" id="appr-reply">${tokens(a.reply_masked || "")}</div>
+      <textarea class="edit" id="appr-edit" hidden aria-label="Edit the reply">${esc(a.reply_masked || "")}</textarea>
+      <p class="faint" id="appr-edit-hint" hidden style="font-size:.75rem;margin:4px 0 0">Keep masked values like &lt;MOBILE_1&gt; as they are; they are filled in when posted. New numbers can't be typed in.</p></div>
+    <div class="field"><label for="appr-comment">Comment (kept in the log; on reject it goes into the note)</label><input type="text" id="appr-comment" maxlength="1000" ${dis}></div>
+    <div id="appr-actions">${approvalButtons(dis)}</div>
+  </section>`;
+}
+function approvalButtons(dis) {
+  if (S.apprConfirm === "approve") return `<div class="confirm"><b>Post this reply on the next pass?</b><div class="actions-row"><button class="btn good" data-action="appr-approve-yes" id="appr-yes">Approve <kbd>Enter</kbd></button><button class="btn" data-action="appr-cancel">Cancel <kbd>Esc</kbd></button></div></div>`;
+  if (S.apprConfirm === "reject") return `<div class="confirm"><b>Reject it?</b><span class="muted">Nothing is sent to the branch. The agent leaves an escalation note with your comment so a person handles the ticket.</span><div class="actions-row"><button class="btn danger" data-action="appr-reject-yes" id="appr-yes">Reject <kbd>Enter</kbd></button><button class="btn" data-action="appr-cancel">Cancel <kbd>Esc</kbd></button></div></div>`;
+  return `<div class="actions-row"><button class="btn good" data-action="appr-approve" ${dis}>Approve <kbd>A</kbd></button>
+    <button class="btn" data-action="appr-edit" ${dis}>${S.apprEdit ? "Stop editing" : "Edit"} <kbd>E</kbd></button>
+    <button class="btn danger" data-action="appr-reject" ${dis}>Reject <kbd>X</kbd></button></div>`;
+}
+function afterApprovalsRender() { const cur = document.querySelector('.qitem[aria-current="true"]'); if (cur) cur.scrollIntoView({ block: "nearest" }); }
+function setApprovalButtons() { const z = $("#appr-actions"); if (z) z.innerHTML = approvalButtons(S.appr && S.appr.can_decide ? "" : "disabled"); const y = $("#appr-yes"); if (y) y.focus(); }
+function toggleEdit() {
+  if (!$("#appr-edit") || !(S.appr && S.appr.can_decide)) return;
+  S.apprEdit = !S.apprEdit;
+  $("#appr-edit").hidden = !S.apprEdit; $("#appr-edit-hint").hidden = !S.apprEdit; $("#appr-reply").hidden = S.apprEdit;
+  setApprovalButtons();
+  if (S.apprEdit) $("#appr-edit").focus();
+}
+async function decideApproval(verdict) {
+  const id = S.apprSel; if (!id) return;
+  const body = { verdict, comment: ($("#appr-comment") || {}).value || "" };
+  if (verdict === "approve" && S.apprEdit) body.reply = $("#appr-edit").value;
+  try {
+    await apiPost(`/api/approvals/${encodeURIComponent(id)}`, body);
+    toast(verdict === "approve" ? "Approved. It is posted on the next pass." : "Rejected. The agent will leave an escalation note.");
+    const items = (S.appr && S.appr.pending) || [];
+    const i = items.findIndex(x => String(x.id) === String(id));
+    const next = items[i + 1] || items[i - 1];
+    S.apprSel = next ? next.id : null;
+    await loadSession(); render();
+  } catch (err) { S.apprConfirm = null; setApprovalButtons(); toast(err.message); }
+}
+function moveApproval(step) {
+  const items = (S.appr && S.appr.pending) || [];
+  if (!items.length) return;
+  const i = Math.max(0, items.findIndex(x => String(x.id) === String(S.apprSel)));
+  const next = items[Math.min(items.length - 1, Math.max(0, i + step))];
+  if (next && next.id !== S.apprSel) { S.apprSel = next.id; render(); }
+}
+
+/* ---------------- palette and keys ---------------- */
+const PAGE_LIST = [["overview", "Overview"], ["approvals", "Approvals"], ["queue", "Open tickets"], ["anomalies", "Anomalies"], ["decisions", "Decisions"],
+  ["review", "Review"], ["emails", "Emails & alerts"], ["runs", "Runs"], ["controls", "Controls"]];
+function closeOverlay() { $("#overlay").innerHTML = ""; S.palette = null; }
+function openPalette() {
+  $("#overlay").innerHTML = `<div class="palette-back" data-action="close-overlay"><div class="palette" role="dialog" aria-label="Go to">
+    <input id="pal-q" placeholder="Ticket number or page…" autocomplete="off" aria-label="Ticket number or page">
+    <ul id="pal-list" role="listbox"></ul><div class="hint"><span><kbd>↑</kbd> <kbd>↓</kbd> choose</span><span><kbd>Enter</kbd> open</span><span><kbd>Esc</kbd> close</span></div></div></div>`;
+  S.palette = { items: [], sel: 0 };
+  paletteSearch("");
+  $("#pal-q").focus();
+}
+let palTimer;
+async function paletteSearch(q) {
+  const text = q.trim().toLowerCase();
+  let items = PAGE_LIST.filter(([, label]) => !text || label.toLowerCase().includes(text)).map(([r, label]) => ({ href: `#${r}`, label, meta: "page" }));
+  const digits = text.replace(/\D/g, "");
+  if (digits.length >= 3) {
+    try {
+      const res = await apiGet(`/api/decisions?q=${encodeURIComponent(digits)}&days=365&limit=8`);
+      const seen = new Set();
+      items = res.items.filter(d => !seen.has(d.ticket_number) && seen.add(d.ticket_number))
+        .map(d => ({ href: `#decision-${d.id}`, label: `Ticket #${d.ticket_number}`, meta: `${(ACTIONS[d.final_action] || {}).short || d.final_action || ""} · ${when(d.created_at)}` })).concat(items);
+    } catch (_) { /* pages only */ }
+  }
+  if (!S.palette) return;
+  S.palette.items = items; S.palette.sel = 0;
+  drawPalette();
+}
+function drawPalette() {
+  const p = S.palette; if (!p || !$("#pal-list")) return;
+  $("#pal-list").innerHTML = p.items.length ? p.items.map((it, i) => `<li><a href="${esc(it.href)}" role="option" aria-selected="${i === p.sel}" data-action="close-overlay">${esc(it.label)}<span class="faint">${esc(it.meta)}</span></a></li>`).join("")
+    : `<li class="faint" style="padding:10px">No match. Ticket numbers search the last year of decisions.</li>`;
+}
+function showKeys() {
+  $("#overlay").innerHTML = `<div class="palette-back" data-action="close-overlay"><div class="palette" role="dialog" aria-label="Keyboard shortcuts">
+    <div class="keys"><kbd>Ctrl K</kbd><span>Go to a ticket or page</span><kbd>J</kbd><span>Approvals: next reply</span><kbd>K</kbd><span>Approvals: previous reply</span>
+    <kbd>A</kbd><span>Approve (then Enter to confirm)</span><kbd>E</kbd><span>Edit the reply</span><kbd>X</kbd><span>Reject (then Enter to confirm)</span>
+    <kbd>?</kbd><span>This list</span><kbd>Esc</kbd><span>Close, cancel or stop editing</span></div></div></div>`;
+}
+document.addEventListener("keydown", e => {
+  if (S.palette) {
+    const p = S.palette;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); p.sel = Math.max(0, Math.min(p.items.length - 1, p.sel + (e.key === "ArrowDown" ? 1 : -1))); drawPalette(); return; }
+    if (e.key === "Enter") { e.preventDefault(); const it = p.items[p.sel]; closeOverlay(); if (it) location.hash = it.href; return; }
+  }
+  if (e.key === "Escape") {
+    if ($("#overlay").innerHTML) { closeOverlay(); return; }
+    if (S.apprConfirm) { S.apprConfirm = null; setApprovalButtons(); return; }
+    if (S.apprEdit) { toggleEdit(); return; }
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openPalette(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey || $("#overlay").innerHTML) return;
+  if (e.target.closest && e.target.closest("input, textarea, select, [contenteditable]")) return;
+  if (e.key === "?") { showKeys(); return; }
+  if (S.route !== "approvals" || !S.apprSel) return;
+  const k = e.key.toLowerCase();
+  if (k === "j" || k === "k") { e.preventDefault(); moveApproval(k === "j" ? 1 : -1); }
+  else if (S.appr && S.appr.can_decide && (k === "a" || k === "x")) { e.preventDefault(); S.apprConfirm = k === "a" ? "approve" : "reject"; setApprovalButtons(); }
+  else if (k === "e") { e.preventDefault(); toggleEdit(); }
+});
+document.addEventListener("input", e => {
+  if (e.target.id === "pal-q") { clearTimeout(palTimer); const v = e.target.value; palTimer = setTimeout(() => paletteSearch(v), 180); }
+});
+
+/* ---------------- events ---------------- */
+document.addEventListener("click", async e => {
+  const row = e.target.closest("tr[data-href]");
+  if (row && !e.target.closest("a")) { location.hash = row.dataset.href; return; }
+  const pageBtn = e.target.closest("[data-page]");
+  if (pageBtn) { S.offset = Math.max(0, S.offset + Number(pageBtn.dataset.page) * 50); render(); return; }
+  const q = e.target.closest("[data-appr]");
+  if (q) { S.apprSel = Number(q.dataset.appr); render(); return; }
+  const act = e.target.closest("[data-action]");
+  if (!act || act.disabled) return;
+  if (act.dataset.action === "close-overlay") { if (e.target === act || act.tagName === "A") closeOverlay(); return; }
+  if (act.dataset.action === "appr-approve" || act.dataset.action === "appr-reject") { S.apprConfirm = act.dataset.action === "appr-approve" ? "approve" : "reject"; setApprovalButtons(); return; }
+  if (act.dataset.action === "appr-cancel") { S.apprConfirm = null; setApprovalButtons(); return; }
+  if (act.dataset.action === "appr-edit") { toggleEdit(); return; }
+  if (act.dataset.action === "appr-approve-yes" || act.dataset.action === "appr-reject-yes") { decideApproval(act.dataset.action === "appr-approve-yes" ? "approve" : "reject"); return; }
+  const note = ($("#ctl-note") || {}).value || "";
+  try {
+    if (act.dataset.action === "ask-pause") {
+      $("#pause-zone").innerHTML = `<div class="confirm"><b>Pause the agent?</b><span class="muted">Tickets stay open and untouched until someone resumes it.</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn danger" data-action="pause">Pause now</button><button class="btn" data-action="cancel">Cancel</button></div></div>`;
+      return;
+    }
+    if (act.dataset.action === "cancel") { render(); return; }
+    if (act.dataset.action === "pause" || act.dataset.action === "resume") {
+      await apiPost("/api/controls", { kill_switch: act.dataset.action === "pause", note });
+      toast(act.dataset.action === "pause" ? "Agent paused" : "Agent resumed");
+    }
+    if (act.dataset.action === "copy-branch") {
+      const text = $("#branch-msg").textContent;
+      try { await navigator.clipboard.writeText(text); toast("Copied"); }
+      catch (_) { const range = document.createRange(); range.selectNodeContents($("#branch-msg")); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range); toast("Press Ctrl+C to copy"); }
+      return;
+    }
+    if (act.dataset.action === "retry-mail") {
+      const res = await apiPost("/api/notifications/retry", {});
+      toast(`${res.requeued} email(s) will be re-sent on the next pass`);
+    }
+    if (act.dataset.action === "save-hold") {
+      const v = (document.querySelector('input[name="hold"]:checked') || {}).value || "";
+      await apiPost("/api/controls", { mode_override: v || null, note });
+      toast(v ? `Agent held at ${v}` : "Mode hold released");
+    }
+    await loadSession(); render();
+  } catch (err) { toast(err.message); }
+});
+document.addEventListener("change", e => {
+  const f = e.target.dataset && e.target.dataset.filter;
+  if (f) { S.filters[f] = e.target.value; S.offset = 0; render(); }
+  if (e.target.dataset && e.target.dataset.mailFilter) { S.mailStatus = e.target.value; render(); }
+  if (e.target.name === "verdict") $("#rv-expected").hidden = e.target.value !== "incorrect";
+});
+let searchTimer;
+document.addEventListener("input", e => {
+  if (e.target.id === "f-q") { clearTimeout(searchTimer); searchTimer = setTimeout(() => { S.filters.q = e.target.value.trim(); S.offset = 0; render().then(() => { const i = $("#f-q"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }); }, 350); }
+});
+document.addEventListener("submit", async e => {
+  if (e.target.id === "filters") { e.preventDefault(); return; }
+  if (e.target.id !== "review-form") return;
+  e.preventDefault();
+  const form = new FormData(e.target);
+  if (!form.get("verdict")) { toast("Choose Correct or Wrong first."); return; }
+  try {
+    await apiPost(`/api/decisions/${e.target.dataset.id}/reviews`, { verdict: form.get("verdict"), expected_action: form.get("expected_action") || null, comment: form.get("comment") || "" });
+    toast("Review saved"); render();
+  } catch (err) { toast(err.message); }
+});
+window.addEventListener("hashchange", () => { window.scrollTo(0, 0); render(); });
+let resizeTimer, lastW = window.innerWidth;
+window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (S.route === "overview" && Math.abs(window.innerWidth - lastW) > 40) { lastW = window.innerWidth; render(); } }, 250); });
+
+(async function start() {
+  if (DEMO) $("#demo").innerHTML = `<div class="demo-banner"><b>Demo data.</b> This is a preview of the console with invented tickets. On the agent server it shows the real decision log, and changes you make here are not saved anywhere.</div>`;
+  try { await loadSession(); } catch (err) { $("#view").innerHTML = errorBox(err); return; }
+  try { const q = await apiGet("/api/quality?days=30"); $("#nav-review").textContent = q.needs_review.length || ""; const qq = await apiGet("/api/queue"); $("#nav-queue").textContent = qq.items.length || ""; const nn = await apiGet("/api/notifications?days=30"); $("#nav-emails").textContent = (nn.counts || {}).failed || ""; } catch (_) { /* counts are optional */ }
+  render();
+  pollLive(); setInterval(pollLive, 5000);
+})();
+</script>

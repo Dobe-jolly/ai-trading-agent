@@ -1,0 +1,22 @@
+[Unit]
+Description=EcoCash agent portal (audit and monitoring console)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ecoagent
+Group=ecoagent
+WorkingDirectory=/opt/ecocash-agent
+EnvironmentFile=/etc/ecocash-agent/agent.env
+ExecStart=/opt/ecocash-agent/.venv/bin/python -m agent portal
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ecocash-agent/state
+
+[Install]
+WantedBy=multi-user.target

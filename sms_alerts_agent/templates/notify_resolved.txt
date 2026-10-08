@@ -1,0 +1,10 @@
+Dear {owner_name},
+
+Ticket #{number} about the client's SMS alerts has been checked and closed:
+
+{reply}
+
+{ticket_link}
+If the client is still not receiving alerts after this, please reply on the ticket in the helpdesk portal or raise a new ticket.
+
+{signature}

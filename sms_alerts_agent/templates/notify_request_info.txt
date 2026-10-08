@@ -1,0 +1,12 @@
+Dear {owner_name},
+
+We need one more detail to finish ticket #{number} about the client's SMS alerts:
+
+{reply}
+
+{reply_hint}
+{ticket_link}
+
+The ticket stays open until we hear from you. If there is no reply within {follow_up}, a member of the service desk will follow up.
+
+{signature}

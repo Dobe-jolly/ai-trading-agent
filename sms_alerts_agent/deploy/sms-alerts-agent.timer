@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the SMS Alerts agent every 15 minutes (same cadence as the Java sms-agent)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target
