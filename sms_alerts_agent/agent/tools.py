@@ -147,8 +147,9 @@ class Toolbox:
         return tools
 
     def run(self, name: str, args: dict[str, Any], pseudo: Pseudonymizer, evidence: Evidence,
-            default_phone: Optional[str]) -> tuple[str, bool]:
-        """Returns (masked result text, is_error)."""
+            ticket: Any = None) -> tuple[str, bool]:
+        """Returns (masked result text, is_error). The ticket's phone field is the default phone for checks."""
+        default_phone = getattr(ticket, "phone_number", None)
         try:
             if name == "check_sms_alert_account":
                 data = self._check_account(pseudo.unmask_obj(args), evidence, default_phone)
