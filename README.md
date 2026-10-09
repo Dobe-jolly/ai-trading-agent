@@ -7,6 +7,7 @@ a request for information or an escalation; the desk's guardrails decide what ac
 
 | Desk | Tickets | What it checks | Details |
 |---|---|---|---|
+| `router` | Tickets under a catch-all topic (HelpDesk / Logging Ticket) or with none | Which help topic the ticket belongs under: the active topics, and where similar closed tickets were filed. Moves it there when an agent works the topic, otherwise suggests it to staff | [docs/router.md](docs/router.md) |
 | `sms_alerts` | SMS Alerts (and SMS issues filed under other topics) | Registration in core banking, the CAE request, dispatch and the SMS gateway | [docs/sms_alerts.md](docs/sms_alerts.md) |
 | `ecocash` | EcoCash linking | Every link and delink attempt (recorded by the EcoCash monitor), EcoCash's answer, the Postilion link record | [docs/ecocash.md](docs/ecocash.md) |
 | `failed_txn` | Failed ZIPIT, EcoCash B2W/W2B, NMB Connect, airtime, ZESA and Postilion transactions | The transaction in Postilion, NMB Connect and the billers, or internet banking; then the debit and any refund in core banking | [docs/failed_txn.md](docs/failed_txn.md) |
@@ -14,7 +15,7 @@ a request for information or an escalation; the desk's guardrails decide what ac
 Every desk runs in the same pass, writes to osTicket the same way, and shows in the same console. How this maps onto the earlier on-prem plan, and what is left of it, is in [docs/architecture.md](docs/architecture.md).
 
 ```
-every 15 min ─► python -m nmbz run ─► SMS Alerts ─► EcoCash ─► Failed transactions ─► …   (DESKS, in order)
+every 15 min ─► python -m nmbz run ─► Router ─► SMS Alerts ─► EcoCash ─► Failed transactions ─► …   (DESKS, in order)
                                         │
             each desk: its open tickets ─► skip rules ─► Claude + the desk's lookups (masked)
                                         ─► guardrails ─► approval for off-script replies ─► osTicket ─► e-mail to the branch
@@ -31,6 +32,7 @@ python -m nmbz portal ─► one console: a tab per desk, approvals, anomalies, 
 | `sms_alerts/` | The SMS Alerts desk: its checks, lookups, triage of other topics, prompts, wording |
 | `ecocash/` | The EcoCash desk, and the monitor that replaces the Java `ecocash-registration-monitor` |
 | `failed_txn/` | The failed-transactions desk: Postilion, NMB Connect and billers, internet banking and core-banking lookups |
+| `router/` | The router: the help-topic catalogue, closed-ticket lookups, and the topic change |
 | `nmbz/` | The service: the command line (`python -m nmbz`), the desk list, the console server |
 | `tests/` | `core/` and one folder per desk (invented data only) |
 | `tools/build_preview.py` | Builds `preview.html`: the console with every desk's demo data (`tools/demo_<desk>.py`) |
@@ -72,7 +74,7 @@ AGENT_MODE=shadow             # every desk decides and logs only...
 ECOCASH_AGENT_MODE=live       # ...except EcoCash, which acts
 ```
 
-Prefixes: `SMS_ALERTS_`, `ECOCASH_`, `FAILED_TXN_`. Each desk keeps its own decision log, pause file and mode hold under
+Prefixes: `ROUTER_`, `SMS_ALERTS_`, `ECOCASH_`, `FAILED_TXN_`. Each desk keeps its own decision log, pause file and mode hold under
 `state/<desk>/`; console users (`state/portal_users.json`) are shared. `DESKS` picks which desks a pass visits
 and in what order. `python -m nmbz desks` shows each desk's mode and log.
 
@@ -110,6 +112,7 @@ python -m nmbz check-account --account N --phone P   # SMS Alerts: one account, 
 python -m nmbz lookup --mobile 0771234567            # EcoCash: a client's link attempts, no model
 python -m nmbz monitor                               # EcoCash: follow ecocashreg.service (its own unit)
 python -m nmbz find-transactions --account N [--amount A] [--date D]   # Failed transactions: every source, no model
+python -m nmbz topics                                # Router: the help topics, and which it moves to on its own
 ```
 
 `python -m nmbz <command> --help` shows a command's options. Exit codes: 0 OK, 1 config error, 2 Metabase
