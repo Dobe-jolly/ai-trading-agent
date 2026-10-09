@@ -74,7 +74,7 @@ AGENT_MODE=shadow             # every desk decides and logs only...
 ECOCASH_AGENT_MODE=live       # ...except EcoCash, which acts
 ```
 
-Prefixes: `ROUTER_`, `SMS_ALERTS_`, `ECOCASH_`, `FAILED_TXN_`. Each desk keeps its own decision log, pause file and mode hold under
+Prefixes: `ROUTER_`, `SMS_ALERTS_`, `ECOCASH_`, `FAILED_TXN_`. One exception: the router ignores `AGENT_MODE` and stays in shadow until `ROUTER_AGENT_MODE` is set, since it changes help topics. Each desk keeps its own decision log, pause file and mode hold under
 `state/<desk>/`; console users (`state/portal_users.json`) are shared. `DESKS` picks which desks a pass visits
 and in what order. `python -m nmbz desks` shows each desk's mode and log.
 
