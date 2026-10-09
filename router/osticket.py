@@ -106,6 +106,7 @@ class Ticket(TicketThread):
     closed_on: Optional[str] = None
     thread_id: Optional[int] = None
     entries: list[ThreadEntry] = field(default_factory=list)
+    moved_earlier: bool = False  # the router's own log says it moved this ticket before
 
     def owner_text(self) -> str:
         parts = [self.subject or ""] + [f"{k}: {v}" for k, v in self.fields.items()]
@@ -119,8 +120,9 @@ class Ticket(TicketThread):
         return "\n".join([self.owner_text()] + [e.body for e in self.entries if e.type != "M"])
 
     def moved_before(self) -> bool:
-        """The router has moved this ticket once already (a person may have moved it back)."""
-        return any(e.type == "N" and MOVE_NOTE_MARKER in e.body for e in self.entries)
+        """The router has moved this ticket once already (a person may have moved it back): its note on the
+        thread, or its own log when the note could not be written."""
+        return self.moved_earlier or any(e.type == "N" and MOVE_NOTE_MARKER in e.body for e in self.entries)
 
     def has_issue_text(self) -> bool:
         """The owner wrote more than a few words about the problem (subject and fields aside)."""

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import os
 from typing import Optional, Union
 
 from dotenv import load_dotenv
@@ -135,7 +136,9 @@ class Settings:
             anthropic_api_key=_str("ANTHROPIC_API_KEY"),
             model=_str("AGENT_MODEL", "claude-sonnet-5-5") or "claude-sonnet-5-5",
             max_agent_turns=_int("AGENT_MAX_TURNS", 10) or 10,
-            mode=(_str("AGENT_MODE", "shadow") or "shadow").lower(),
+            # Not the shared AGENT_MODE: the router changes help topics, so it acts only when set on purpose.
+            mode=(os.getenv(f"{prefix}_AGENT_MODE") or "shadow").lower() if prefix else
+                 (_str("AGENT_MODE", "shadow") or "shadow").lower(),
             confidence_threshold=_float("CONFIDENCE_THRESHOLD", 0.85),
             max_tickets_per_run=_int("MAX_TICKETS_PER_RUN", 25) or 25,
             max_closes_per_run=_int("MAX_CLOSES_PER_RUN", 20) or 0,

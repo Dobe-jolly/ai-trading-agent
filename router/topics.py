@@ -26,6 +26,11 @@ GROUP BY t.topic_id"""
 VOLUME_DAYS = 90
 
 
+def loose(name: Optional[str]) -> str:
+    """How a name the model writes is looked up: also runs of spaces inside it do not matter."""
+    return " ".join(fold_topic(name).split())
+
+
 @dataclass
 class Topic:
     topic_id: int
@@ -77,12 +82,12 @@ class Catalogue:
         self.never_to = [t for t in never_to if t.strip()]
         self.move_to = [t for t in move_to if t.strip()]
         self.active = sorted((t for t in self.all if t.active), key=lambda t: (-t.recent, t.name.lower()))
-        self._by_key = {t.key: t for t in self.active}
+        self._by_key = {loose(t.path): t for t in self.active}
 
     # ---- looking a topic up ------------------------------------------------------------------
     def find(self, name: Optional[str]) -> Optional[Topic]:
         """The active topic with this name (case, spacing and a trailing slash do not matter)."""
-        return self._by_key.get(fold_topic(name))
+        return self._by_key.get(loose(name))
 
     def is_catch_all(self, name: Optional[str]) -> bool:
         return topic_matches(name, self.catch_alls)

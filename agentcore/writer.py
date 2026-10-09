@@ -22,7 +22,7 @@ class TicketWriter:
     def note(self, ticket: Ticket, text: str, marker: Optional[str] = None) -> bool:
         raise NotImplementedError
 
-    def set_topic(self, ticket: Ticket, from_topic_id: int, to_topic_id: int) -> None:
+    def set_topic(self, ticket: Ticket, from_topic_id: int, to_topic_id: int) -> bool:
         raise NotImplementedError
 
 
@@ -47,8 +47,9 @@ class ShadowWriter(TicketWriter):
         self.calls.append(("note", ticket.number, text))
         return True
 
-    def set_topic(self, ticket: Ticket, from_topic_id: int, to_topic_id: int) -> None:
+    def set_topic(self, ticket: Ticket, from_topic_id: int, to_topic_id: int) -> bool:
         self.calls.append(("topic", ticket.number, f"{from_topic_id} -> {to_topic_id}"))
+        return True
 
 
 class OsTicketWriter(TicketWriter):
@@ -72,5 +73,5 @@ class OsTicketWriter(TicketWriter):
     def note(self, ticket: Ticket, text: str, marker: Optional[str] = None) -> bool:
         return self.store.post_note(ticket, self.staff_id, self.poster, text, marker)
 
-    def set_topic(self, ticket: Ticket, from_topic_id: int, to_topic_id: int) -> None:
-        self.store.set_topic(ticket, from_topic_id, to_topic_id)
+    def set_topic(self, ticket: Ticket, from_topic_id: int, to_topic_id: int) -> bool:
+        return self.store.set_topic(ticket, from_topic_id, to_topic_id, (self.staff_id,))

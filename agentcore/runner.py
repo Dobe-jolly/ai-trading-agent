@@ -415,7 +415,8 @@ class DeskRunner:
     def _follow_up_expired_request(self, ticket: Any, run_id: str) -> Optional[tuple[str, int]]:
         """No answer to the agent's question: hand the ticket to a person (no model call)."""
         hours = self.s.request_info_timeout_hours
-        decision = Decision(ESCALATE, 1.0, EXPIRED_CATEGORY,
+        decision_type = getattr(self.agent, "decision_type", Decision)  # the desk's own, with any fields it adds
+        decision = decision_type(ESCALATE, 1.0, EXPIRED_CATEGORY,
                             f"The agent asked the ticket owner for information and has had no reply for over {hours:g} "
                             "hours. A person should follow up with the branch or close the ticket.")
         result = self.result_type(decision=decision)

@@ -236,3 +236,50 @@ def test_asking_about_a_ticket_that_describes_the_problem_waits_for_a_person(set
 
     why = ApprovalStore(runner.audit.db).open_for(1)["why"]
     assert "already describes the problem, so the standard outcome is move, not request info" in why
+
+
+def test_a_ticket_assigned_while_the_pass_ran_is_not_moved(settings, mb):
+    mb.add_ticket(1, "200001", [ZIPIT])
+    runner, audit = build(settings, mb, ScriptedModel(MOVE_ZIPIT), mode="live")
+    real_state = runner.store.state
+
+    def assigned_meanwhile(ticket):  # a person takes the ticket after the pass read it
+        mb.tickets[1]["staff_id"] = 77
+        return real_state(ticket)
+
+    runner.store.state = assigned_meanwhile
+    runner.run()
+    assert mb.tickets[1]["topic_id"] == 122 and mb.thread_entries(1)[-1]["type"] == "M"
+    assert json.loads(audit.last_for_ticket(1)["executed"]) == ["not moved: the ticket changed"]
+
+
+def test_a_move_in_the_log_counts_even_without_its_note(settings, mb):
+    mb.add_ticket(1, "200001", [ZIPIT])
+    runner, audit = build(settings, mb, ScriptedModel(), mode="live")
+    audit.record(run_id="r0", mode="live", ticket_id=1, ticket_number="200001", proposed_action="move",
+                 final_action="move", confidence=0.9, category="desk_topic", executed=["moved"])
+    assert runner.run().skipped == {"moved before; a person filed it back here": 1}
+
+
+def test_an_unanswered_request_and_a_model_that_never_decides_do_not_break_the_pass(settings, mb):
+    mb.add_ticket(1, "200001", ["Please assist"], created=now_local() - timedelta(days=5))
+    mb.add_entry(1, "R", "Kindly describe the problem.", staff_id=AGENT_STAFF, created=now_local() - timedelta(days=4))
+    mb.add_ticket(2, "200002", [ZIPIT])
+    from tests.router.conftest import text_block, response
+
+    model = ScriptedModel(response(text_block("Thinking.")), response(text_block("Still thinking.")))
+    runner, audit = build(settings, mb, model, mode="live")
+    summary = runner.run()
+    assert summary.errors == 0 and summary.actions == {"escalate": 2}
+    assert audit.last_for_ticket(1)["category"] == "request_info_timeout"
+    assert ESCALATION_NOTE_MARKER in mb.thread_entries(2)[-1]["body"]
+
+
+def test_the_router_stays_in_shadow_unless_its_own_mode_is_set(monkeypatch, tmp_path):
+    from router.config import Settings
+
+    monkeypatch.setenv("AGENT_MODE", "live")
+    monkeypatch.delenv("ROUTER_AGENT_MODE", raising=False)
+    assert Settings.from_env(tmp_path / "none.env").mode == "shadow"
+    monkeypatch.setenv("ROUTER_AGENT_MODE", "live")
+    assert Settings.from_env(tmp_path / "none.env").mode == "live"

@@ -2,7 +2,9 @@
 
 Part of the NMBZ helpdesk agents service. Installing, settings, commands and the console are in the
 [README](../README.md); this page covers what the router does. Its settings take the prefix `ROUTER_` when they
-should differ from the other desks (`ROUTER_AGENT_MODE=live`).
+should differ from the other desks. Its mode is the exception: the shared `AGENT_MODE` does not apply, so the router
+stays in shadow until `ROUTER_AGENT_MODE` is set (it changes help topics, so it acts only when switched on for
+itself).
 
 Many tickets arrive under a catch-all topic or with no help topic at all, although a more specific topic exists.
 HelpDesk / Logging Ticket alone takes about 145 tickets a year, and e-mailed tickets often carry no topic. Filed
@@ -72,10 +74,12 @@ and their results are masked like the ticket.
 | A request for information that breaks the reply rules (numbers it was never shown, links, PIN/OTP talk) | Suggested to staff |
 | The agent has already asked `MAX_INFO_REQUESTS` times | Suggested to staff |
 
-**What a move writes.** The ticket's help topic changes (only if it is still under the topic it was read under,
-then read back to check), and an internal note says where it came from, where it went, and why: "If this is
-wrong, file it back or under the right topic; the routing agent will not move it again." The department and the
-assignee are not changed.
+**What a move writes.** The ticket's help topic changes, only if it is still under the topic it was read under
+and nobody has been assigned to it meanwhile (then read back to check; otherwise nothing changes and the log says
+"not moved: the ticket changed"). An internal note says where it came from, where it went, and why: "If this is
+wrong, file it back or under the right topic; the routing agent will not move it again." The department, team and
+assignee are not changed: HelpDesk / Logging Ticket assigns team 5, and the ticket keeps it. A move is also kept in
+the router's log, so a ticket is never moved twice even if the note could not be written.
 
 **Approvals.** A request for information waits in the console when the ticket already describes the problem (the
 standard outcome is then a move), or when Claude asked for something other than a description of the problem.

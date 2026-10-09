@@ -190,7 +190,7 @@ def overview(conn: sqlite3.Connection, days: int, stale_minutes: int,
         "days": days,
         "health": health(conn, stale_minutes),
         "kpis": {
-            "decided": len(decided),
+            "decided": len(acted) + len(held),  # a held reply is counted once: waiting, or as what followed it
             "closed": actions.get("reply_and_close", 0),
             "escalated": actions.get("escalate", 0),
             "request_info": actions.get("request_info", 0),

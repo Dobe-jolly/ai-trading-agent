@@ -51,10 +51,11 @@ FOLDED_TOPIC_PATH = f"TRIM(TRIM(TRAILING '/' FROM TRIM({TOPIC_PATH})))"
 
 
 def fold_topic(name: Optional[str]) -> str:
-    """A help topic name as compared: case, runs of spaces and a trailing ' /' do not matter."""
-    text = " ".join((name or "").split()).upper()
+    """A help topic name as compared, the same way as FOLDED_TOPIC_PATH in SQL: case, spaces at the ends and a
+    trailing slash do not matter (spaces inside the name do)."""
+    text = (name or "").strip().upper()
     while text.endswith("/"):
-        text = text[:-1].rstrip()
+        text = text[:-1].strip()
     return text
 
 
@@ -465,21 +466,28 @@ WHERE ticket_id = {sql.integer(ticket.ticket_id)}""")
         if not ok:
             raise MetabaseError(f"Ticket close verification failed for ticket {ticket.ticket_id}")
 
-    def set_topic(self, ticket: Any, from_topic_id: int, to_topic_id: int) -> None:
-        """File the ticket under another help topic, only if it is still under the one it was read under."""
+    def set_topic(self, ticket: Any, from_topic_id: int, to_topic_id: int, staff_ids: Iterable[int] = (0,)) -> bool:
+        """File the ticket under another help topic, only if it is still under the one it was read under and is not
+        assigned to anyone but staff_ids (0 = nobody). True when moved; False when the ticket changed meanwhile."""
         tid = sql.integer(ticket.ticket_id)
+        allowed = ", ".join(sql.integer(i) for i in sorted(set(staff_ids) | {0}))
         self.mb.write(self.db, f"""UPDATE ost_ticket
 SET topic_id = {sql.integer(to_topic_id)},
     lastupdate = NOW(),
     updated = NOW()
-WHERE ticket_id = {tid} AND topic_id = {sql.integer(from_topic_id)}""")
-        rows = self.mb.query(self.db, f"SELECT topic_id FROM ost_ticket WHERE ticket_id = {tid}")
-        try:
-            ok = bool(rows) and int(rows[0].get("topic_id")) == int(to_topic_id)
-        except (TypeError, ValueError):
-            ok = False
-        if not ok:
+WHERE ticket_id = {tid} AND topic_id = {sql.integer(from_topic_id)} AND COALESCE(staff_id, 0) IN ({allowed})""")
+        rows = self.mb.query(self.db, f"SELECT topic_id, staff_id FROM ost_ticket WHERE ticket_id = {tid}")
+        if not rows:
             raise MetabaseError(f"Help topic change verification failed for ticket {ticket.ticket_id}")
+        try:
+            topic, staff = int(rows[0].get("topic_id") or 0), int(rows[0].get("staff_id") or 0)
+        except (TypeError, ValueError):
+            raise MetabaseError(f"Help topic change verification failed for ticket {ticket.ticket_id}") from None
+        if topic == int(to_topic_id):
+            return True
+        if topic == int(from_topic_id) and str(staff) in allowed.split(", "):
+            raise MetabaseError(f"Help topic change did not apply to ticket {ticket.ticket_id}")
+        return False  # filed elsewhere or assigned to a person meanwhile
 
     def post_note(self, ticket: Any, staff_id: int, poster: str, note: str, marker: Optional[str] = None) -> bool:
         """Internal note ('N'). Returns False when skipped as a duplicate (marker or exact body)."""

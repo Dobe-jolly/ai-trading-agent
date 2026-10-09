@@ -82,7 +82,7 @@ class FakeMetabase(_TicketFake):
                    **kwargs: Any) -> None:
         tid = self.topic_id(topic)
         super().add_ticket(ticket_id, number, messages, topic=self.path(tid) if tid else "", subject=subject, **kwargs)
-        self.tickets[ticket_id].update(topic_id=tid, assignee_id=assignee or 0)
+        self.tickets[ticket_id].update(topic_id=tid, staff_id=assignee or 0)
 
     def add_closed(self, ticket_id: int, number: str, subject: str, topic: str, message: str = "",
                    days_ago: int = 20) -> None:
@@ -118,9 +118,9 @@ class FakeMetabase(_TicketFake):
             rows.sort(key=lambda x: x["ticket_id"], reverse=True)
             return [{"ticket_id": t["ticket_id"], "ticket_num": t["ticket_num"], "subject": t["subject"],
                      "created": t["created"], "first_message": self._first_message(t, raw=True)} for t in rows[:6]]
-        if sql.startswith("SELECT topic_id FROM ost_ticket WHERE ticket_id"):
+        if sql.startswith("SELECT topic_id, staff_id FROM ost_ticket WHERE ticket_id"):
             t = self.tickets[int(re.search(r"ticket_id = (\d+)", sql).group(1))]
-            return [{"topic_id": t["topic_id"]}]
+            return [{"topic_id": t["topic_id"], "staff_id": t["staff_id"]}]
         return super()._ticket_query(sql)
 
     def _first_message(self, t: dict[str, Any], raw: bool = False) -> str:
@@ -145,18 +145,20 @@ class FakeMetabase(_TicketFake):
             if since and t["created"] < since.group(1):
                 continue
             rows.append({"ticket_id": t["ticket_id"], "ticket_num": t["ticket_num"], "created": t["created"],
-                         "closed_on": t["closed"], "topic_id": t["topic_id"], "assignee_id": t["assignee_id"],
+                         "closed_on": t["closed"], "topic_id": t["topic_id"], "assignee_id": t["staff_id"],
                          "subject": t["subject"], "help_topic": t["help_topic"], "org_name": t["org_name"],
                          "route_scope": 1})
         return rows
 
     def write(self, database_id: int, sql: str) -> None:
-        m = re.search(r"UPDATE ost_ticket\nSET topic_id = (\d+),.*WHERE ticket_id = (\d+) AND topic_id = (\d+)", sql, re.S)
+        m = re.search(r"UPDATE ost_ticket\nSET topic_id = (\d+),.*WHERE ticket_id = (\d+) AND topic_id = (\d+) "
+                      r"AND COALESCE\(staff_id, 0\) IN \(([\d, ]+)\)", sql, re.S)
         if m:
             self.writes.append(sql)
-            to_id, ticket_id, from_id = (int(x) for x in m.groups())
+            to_id, ticket_id, from_id = (int(x) for x in m.groups()[:3])
+            allowed = {int(x) for x in m.group(4).split(",")}
             t = self.tickets[ticket_id]
-            if t["topic_id"] == from_id:
+            if t["topic_id"] == from_id and t["staff_id"] in allowed:
                 t.update(topic_id=to_id, help_topic=self.path(to_id))
             return
         super().write(database_id, sql)

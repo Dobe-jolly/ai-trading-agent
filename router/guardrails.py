@@ -74,7 +74,7 @@ def apply_guardrails(
         return GuardrailResult(decision, decision, notes)
 
     # 2. The target must be a real topic the ticket may go to.
-    target = catalogue.find(decision.target_topic)
+    target = catalogue.find(getattr(decision, "target_topic", ""))
     if target is None:
         return to(ESCALATE, f"move blocked: {decision.target_topic!r} is not an active help topic")
     if fold_topic(target.path) == fold_topic(ticket.help_topic):

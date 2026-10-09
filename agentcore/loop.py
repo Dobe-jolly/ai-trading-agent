@@ -86,7 +86,7 @@ class TicketAgent:
 
     def decide(self, ticket: Any, as_of: Optional[str] = None) -> AgentResult:
         pseudo = Pseudonymizer()
-        result = self.result_type(decision=Decision.fallback("not decided"), pseudo=pseudo)
+        result = self.result_type(decision=self.decision_type.fallback("not decided"), pseudo=pseudo)
         messages: list[dict[str, Any]] = [{
             "role": "user",
             "content": pseudo.mask(self.render(ticket, as_of, self._agent_staff_id, self.context))
@@ -117,7 +117,7 @@ class TicketAgent:
 
             if not tool_uses:
                 if nudged:
-                    result.decision = Decision.fallback("Model ended without submitting a decision.")
+                    result.decision = self.decision_type.fallback("Model ended without submitting a decision.")
                     break
                 nudged = True
                 messages.append({"role": "user", "content": NUDGE})
@@ -149,7 +149,7 @@ class TicketAgent:
                 result.decision = decision
                 break
         else:
-            result.decision = Decision.fallback(f"No decision within {self._max_turns} turns.")
+            result.decision = self.decision_type.fallback(f"No decision within {self._max_turns} turns.")
 
         result.transcript = messages
         return result
