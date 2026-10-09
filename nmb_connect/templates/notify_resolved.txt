@@ -1,0 +1,10 @@
+Dear {owner_name},
+
+Ticket #{number} about the client's NMB Connect access has been checked and closed:
+
+{reply}
+
+{ticket_link}
+If the client still cannot use NMB Connect, please reply on the ticket in the helpdesk portal or raise a new ticket.
+
+{signature}

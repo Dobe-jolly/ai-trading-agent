@@ -45,9 +45,12 @@ ALL = {
     "failed_txn": Desk("failed_txn", "Failed transactions", "FAILED_TXN", ("find-transactions",),
                        "ZIPIT, B2W/W2B, card, NMB Connect, airtime and bill payments: the switch, the billers and "
                        "core banking."),
+    "nmb_connect": Desk("nmb_connect", "NMB Connect", "NMB_CONNECT", ("connect-lookup",),
+                        "NMB Connect registration, login, OTP, forgotten username and accounts not showing: the "
+                        "profile, core banking, app activity and the SMS gateway."),
 }
 # The router goes first: a ticket it files under a desk's topic is picked up by that desk in the same pass.
-DEFAULT_ORDER = "router,sms_alerts,ecocash,failed_txn"
+DEFAULT_ORDER = "router,sms_alerts,ecocash,failed_txn,nmb_connect"
 
 
 def enabled() -> list[Desk]:

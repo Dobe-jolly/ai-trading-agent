@@ -27,7 +27,8 @@ def test_run_visits_every_desk_in_order_and_reports_the_worst(calls):
     assert calls == [("router", ["run", "--mode", "shadow", "--limit", "5"]),  # first: it files tickets for the rest
                      ("sms_alerts", ["run", "--mode", "shadow", "--limit", "5"]),
                      ("ecocash", ["run", "--mode", "shadow", "--limit", "5"]),
-                     ("failed_txn", ["run", "--mode", "shadow", "--limit", "5"])]
+                     ("failed_txn", ["run", "--mode", "shadow", "--limit", "5"]),
+                     ("nmb_connect", ["run", "--mode", "shadow", "--limit", "5"])]
 
 
 def test_desks_setting_picks_and_orders_the_desks(calls, monkeypatch):
@@ -56,6 +57,7 @@ def test_desk_commands_go_to_their_desk(calls):
     cli.main(["check-account", "--account", "1"])
     cli.main(["find-transactions", "--account", "1"])
     cli.main(["topics"])
+    cli.main(["connect-lookup", "--cif", "1234567"])
     with pytest.raises(SystemExit, match="Say which desk"):
         cli.main(["audit", "--since", "2026-10-01"])
     cli.main(["audit", "--desk", "sms_alerts", "--since", "2026-10-01"])
@@ -65,4 +67,5 @@ def test_desk_commands_go_to_their_desk(calls):
                      ("sms_alerts", ["check-account", "--account", "1"]),
                      ("failed_txn", ["find-transactions", "--account", "1"]),
                      ("router", ["topics"]),
+                     ("nmb_connect", ["connect-lookup", "--cif", "1234567"]),
                      ("sms_alerts", ["audit", "--since", "2026-10-01"])]

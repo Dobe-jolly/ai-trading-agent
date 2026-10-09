@@ -13,6 +13,7 @@ DESK_COMMANDS = {
     "sms_alerts": {"check-account", "anomalies"},
     "ecocash": {"lookup", "monitor", "anomalies"},
     "failed_txn": {"find-transactions"},
+    "nmb_connect": {"connect-lookup"},
 }
 SHARED = {"check", "run", "audit", "report", "compare", "portal", "portal-user", "notify-test", "notify-retry",
           "attachments"}

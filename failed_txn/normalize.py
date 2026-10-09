@@ -18,9 +18,8 @@ from agentcore.normalize import (  # noqa: F401 - shared helpers, re-exported fo
     window,
 )
 from agentcore.normalize import format_timestamp as _format_timestamp
+from agentcore.normalize import ACCOUNT_RE, MOBILE_RE, account_key, mobile_key  # noqa: F401 - shared with the desks
 
-MOBILE_RE = re.compile(r"(?<![\d+])(?:\+?263|0)?[\s-]?(7[1378])(?:[\s-]?\d){7}(?!\d)")
-ACCOUNT_RE = re.compile(r"(?<![\d+])\d(?:[\s-]?\d){9,15}(?!\d)")
 # A reference the client or branch quotes: "RRN 612345678901", "ref: ZP12345678", "Reference number 123456"
 REFERENCE_RE = re.compile(r"(?i)\b(?:rrn|ref(?:erence)?(?:\s*(?:no|number|#))?|trace|stan|txn\s*id|transaction\s*id)"
                           r"\s*[:#.\-]?\s*([A-Za-z0-9]{6,32})\b")
@@ -33,12 +32,6 @@ CURRENCIES = {"840": "USD", "USD": "USD", "US$": "USD", "$": "USD",
 CENT = Decimal("0.01")
 
 
-def account_key(value: Any) -> Optional[str]:
-    """Account digits without leading zeros (00000232728329 and 232728329 are one account)."""
-    digits = digits_only(value).lstrip("0")
-    return digits if 6 <= len(digits) <= 20 else None
-
-
 def account_forms(value: Any) -> list[str]:
     """The forms an account may be stored in: as given, without leading zeros, and zero-padded to 14 digits."""
     digits = digits_only(value)
@@ -47,17 +40,6 @@ def account_forms(value: Any) -> list[str]:
         return []
     forms = [digits, key, key.zfill(14)]
     return list(dict.fromkeys(f for f in forms if f))
-
-
-def mobile_key(value: Any) -> Optional[str]:
-    """The last nine digits of a Zimbabwe mobile (772123456), whatever the format; None if not one."""
-    digits = digits_only(value)
-    if digits.startswith("263"):
-        digits = digits[3:]
-    digits = digits.lstrip("0")
-    if len(digits) != 9 or digits[:2] not in ("71", "73", "77", "78"):
-        return None
-    return digits
 
 
 def reference_key(value: Any) -> Optional[str]:

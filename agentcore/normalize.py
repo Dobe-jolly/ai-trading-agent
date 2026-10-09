@@ -73,3 +73,44 @@ def format_timestamp(value: Optional[datetime], empty: str = "") -> str:
     if value is None:
         return empty
     return value.astimezone(LOCAL_ZONE).strftime("%d-%m-%Y %H:%M")
+
+
+# ---- client identifiers as tickets and the bank's systems write them (shared by the desks) -------------------
+MOBILE_RE = re.compile(r"(?<![\d+])(?:\+?263|0)?[\s-]?(7[1378])(?:[\s-]?\d){7}(?!\d)")
+ACCOUNT_RE = re.compile(r"(?<![\d+])\d(?:[\s-]?\d){9,15}(?!\d)")
+ID_RE = re.compile(r"(?<![\w-])(\d{2})[\s-]?(\d{6,7})[\s-]?([A-Za-z])[\s-]?(\d{2})(?![\w])")
+NETWORKS = {"71": "NetOne", "73": "Telecel", "77": "Econet", "78": "Econet"}
+
+
+def mobile_key(value: Any) -> Optional[str]:
+    """The last nine digits of a Zimbabwe mobile (772123456), whatever the format; None if not one."""
+    digits = digits_only(value)
+    if digits.startswith("263"):
+        digits = digits[3:]
+    digits = digits.lstrip("0")
+    if len(digits) != 9 or digits[:2] not in NETWORKS:
+        return None
+    return digits
+
+
+def account_key(value: Any) -> Optional[str]:
+    """Account digits without leading zeros (00000232728329 and 232728329 are one account)."""
+    digits = digits_only(value).lstrip("0")
+    return digits if 6 <= len(digits) <= 20 else None
+
+
+def id_key(value: Any) -> Optional[str]:
+    """A Zimbabwe national ID without separators, upper case (58-7654321 F 09 -> 587654321F09)."""
+    m = ID_RE.search(str(value or ""))
+    if not m:
+        return None
+    return "".join(m.groups()).upper()
+
+
+def normalize_account_number(value: Any) -> Optional[str]:
+    """14-digit form used by core banking (IACLINK_ACTUAL_ACNUM), as the SMS agent and the Java use it."""
+    digits = digits_only(value)
+    if not digits or len(digits) > 20:
+        return None
+    return digits.zfill(14) if len(digits) < 14 else digits
+
