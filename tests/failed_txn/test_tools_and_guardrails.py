@@ -83,8 +83,9 @@ def test_confirming_a_failed_transaction_checks_core_banking(mb):
 
 
 def test_same_amount_rivals_are_flagged(mb):
-    mb.add_switch(20, rsp="00", rrn="611111111111", when=now_local() - timedelta(days=1, hours=3))
-    mb.add_switch(20, rsp="91", rrn="622222222222", when=now_local() - timedelta(days=1, hours=2))
+    noon = (now_local() - timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)  # same day at any hour
+    mb.add_switch(20, rsp="00", rrn="611111111111", when=noon)
+    mb.add_switch(20, rsp="91", rrn="622222222222", when=noon + timedelta(hours=1))
     t, pseudo = ticket(), Pseudonymizer()
     ev = setup(mb, pseudo, t)
     box = toolbox(mb)

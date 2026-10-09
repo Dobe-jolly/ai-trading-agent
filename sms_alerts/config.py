@@ -321,3 +321,8 @@ class Settings:
             notes.append("Anomaly alerts have no recipients: set ADMIN_SMS_RECIPIENTS and/or ADMIN_EMAIL_RECIPIENTS "
                          "(incidents still show in the portal).")
         return notes
+
+
+def owned_topics(s: Settings) -> tuple[list, list]:
+    """(topics this desk works, subtopics it leaves alone): the router moves tickets here on its own."""
+    return list(s.sms_topics), []

@@ -285,3 +285,8 @@ class Settings:
                 notes.append("Pillow is not installed: large photos and BMP/TIFF images attached to tickets cannot be "
                              "shrunk or converted, so they are not read. pip install Pillow")
         return notes
+
+
+def owned_topics(s: Settings) -> tuple[list, list]:
+    """(topics this desk works, subtopics it leaves alone): the router moves tickets here on its own."""
+    return list(s.topics), list(s.exclude_topics)

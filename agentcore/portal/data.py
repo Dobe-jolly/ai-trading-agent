@@ -11,16 +11,18 @@ from typing import Any, Optional
 
 from ..normalize import LOCAL_ZONE
 
-ACTIONS = ("reply_and_close", "request_info", "escalate", "no_action")
+ACTIONS = ("reply_and_close", "request_info", "escalate", "no_action", "move")
 LOW_CONFIDENCE = 0.9
 # Never the body: it holds real account and phone numbers until it is sent (then it is erased).
 NOTIFICATION_COLUMNS = ("id, created_at, decision_id, ticket_id, ticket_number, kind, channel, recipient, cc, subject, "
                         "status, attempts, last_error, sent_at")
 REVIEW_SQL = "(SELECT verdict FROM reviews r WHERE r.decision_id = d.id ORDER BY r.id DESC LIMIT 1)"
+# Where a reply held for approval stands now: pending, approved (posted on the next pass), posted, rejected, ...
+APPROVAL_STATUS_SQL = "(SELECT a.status FROM approvals a WHERE a.decision_id = d.id ORDER BY a.id DESC LIMIT 1)"
 SUMMARY_COLUMNS = (
     "d.id, d.created_at, d.mode, d.run_id, d.ticket_id, d.ticket_number, d.proposed_action, d.final_action, "
     "d.confidence, d.category, d.account_statuses, d.guardrail_notes, d.executed, d.deferred, d.error, "
-    f"{REVIEW_SQL} AS review_verdict"
+    f"{REVIEW_SQL} AS review_verdict, {APPROVAL_STATUS_SQL} AS approval_status"
 )
 
 
@@ -48,12 +50,22 @@ def local_day(iso: str) -> str:
         return iso[:10]
 
 
-HELD = "awaiting approval"  # in `executed` while a reply waits in the console; the posted reply gets its own row
+HELD = "awaiting approval"  # in `executed` when a reply was held for approval; what follows gets its own row
 HELD_SQL = "COALESCE(d.executed, '') LIKE '%awaiting approval%'"
+WAITING = ("pending", "approved")  # still waiting: in the console, or approved and posted on the next pass
 
 
 def is_held(row: Any) -> bool:
+    """The reply was held for approval (whatever happened to it since)."""
     return HELD in _json(row["executed"], [])
+
+
+def approval_state(row: Any) -> Optional[str]:
+    """For a held reply: where its approval stands now (pending, approved, posted, rejected, dropped, ...)."""
+    if not is_held(row):
+        return None
+    state = row["approval_status"] if "approval_status" in row.keys() else None
+    return state or "pending"
 
 
 def summary(row: sqlite3.Row) -> dict[str, Any]:
@@ -75,7 +87,8 @@ def summary(row: sqlite3.Row) -> dict[str, Any]:
         "guardrail_changed": bool(row["proposed_action"] and row["final_action"]
                                   and row["proposed_action"] != row["final_action"]),
         "executed": _json(row["executed"], []),
-        "held": is_held(row),
+        "held": approval_state(row) in WAITING,
+        "approval": approval_state(row),
         "deferred": bool(row["deferred"]),
         "error": row["error"],
         "review": row["review_verdict"] if "review_verdict" in keys else None,
@@ -115,8 +128,9 @@ def health(conn: sqlite3.Connection, stale_minutes: int, now: Optional[datetime]
 def overview(conn: sqlite3.Connection, days: int, stale_minutes: int,
              price_in: Optional[float] = None, price_out: Optional[float] = None, *,
              groups: Optional[dict[str, str]] = None, group_keys: tuple = (),
-             by_day_key: str = "groups_by_day") -> dict[str, Any]:
-    """groups maps a check status to a series of the by-day chart (group_keys, in order)."""
+             by_day_key: str = "groups_by_day", group_by: str = "status") -> dict[str, Any]:
+    """groups maps a check status (or, with group_by="category", the decision's category) to a series of the
+    by-day chart (group_keys, in order)."""
     groups = groups or {}
     since = since_iso(days)
     rows = conn.execute(
@@ -125,7 +139,7 @@ def overview(conn: sqlite3.Connection, days: int, stale_minutes: int,
     decided = [r for r in rows if not r["error"] and not r["deferred"]]
     # A reply held for approval is not an outcome yet: once approved it is recorded again (and counted then), once
     # rejected it becomes an escalation. Count it apart, never as replied or asked.
-    held = [r for r in decided if is_held(r)]
+    held = [r for r in decided if approval_state(r) in WAITING]
     acted = [r for r in decided if not is_held(r)]
     actions = Counter(r["final_action"] for r in acted)
     tokens_in = sum(r["input_tokens"] or 0 for r in rows)
@@ -145,7 +159,11 @@ def overview(conn: sqlite3.Connection, days: int, stale_minutes: int,
             by_day[day][r["final_action"]] += 1
         for status in _json(r["account_statuses"], {}).values():
             statuses[status] += 1
-            group = groups.get(status)
+            group = groups.get(status) if group_by == "status" else None
+            if group and day in by_group:
+                by_group[day][group] += 1
+        if group_by == "category":
+            group = groups.get(r["category"] or "")
             if group and day in by_group:
                 by_group[day][group] += 1
         if r["proposed_action"] != r["final_action"]:
@@ -177,6 +195,7 @@ def overview(conn: sqlite3.Connection, days: int, stale_minutes: int,
             "escalated": actions.get("escalate", 0),
             "request_info": actions.get("request_info", 0),
             "no_action": actions.get("no_action", 0),
+            "moved": actions.get("move", 0),
             "held": len(held),
             "deferred": sum(1 for r in rows if r["deferred"]),
             "errors": sum(1 for r in rows if r["error"]),
@@ -209,7 +228,7 @@ def _filters(params: dict[str, str]) -> tuple[str, list[Any]]:
         where.append(f"d.final_action = ? AND NOT {HELD_SQL}")
         args.append(params["action"])
     elif params.get("action") == "held":
-        where.append(HELD_SQL)
+        where.append(f"{HELD_SQL} AND COALESCE({APPROVAL_STATUS_SQL}, 'pending') IN ('pending', 'approved')")
     if params.get("mode") in ("shadow", "notes", "live", "audit"):
         where.append("d.mode = ?")
         args.append(params["mode"])

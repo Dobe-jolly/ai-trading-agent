@@ -152,6 +152,10 @@ class DeskRunner:
     def audit_columns(self, ticket: Any, result: AgentResult) -> dict[str, Any]:
         return {}
 
+    def execute_other(self, ticket: Any, result: AgentResult, guard: GuardrailResult) -> list[str]:
+        """Live mode: carry out an action of the desk's own (the router's move). Returns what was done."""
+        raise NotImplementedError(f"no writer for action {guard.final.action!r}")
+
     # ---- notes -------------------------------------------------------------------------------
     def escalation_note(self, ticket: Any, result: AgentResult, guard: GuardrailResult,
                         context: Optional[str] = None) -> str:
@@ -526,6 +530,8 @@ class DeskRunner:
                 done.append("reply")
                 self.writer.close(ticket)
                 done.append("close")
+            elif action not in (REPLY_AND_CLOSE, REQUEST_INFO):
+                done += self.execute_other(ticket, result, guard)
             return done, None
         except Exception as exc:  # noqa: BLE001 - a failed write must be recorded, never crash the run
             log.error("#%s: write failed after %s: %s", ticket.number, done or "nothing", exc)

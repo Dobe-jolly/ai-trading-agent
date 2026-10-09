@@ -140,6 +140,9 @@ class AuditLog:
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute("PRAGMA busy_timeout=15000")
         self._db.executescript(SCHEMA)
+        from .approval import SCHEMA as APPROVAL_SCHEMA  # the console reads each held reply's approval
+
+        self._db.executescript(APPROVAL_SCHEMA)
         # Columns added after a log may already exist.
         have = {r[1] for r in self._db.execute("PRAGMA table_info(decisions)").fetchall()}
         for column in ("facts", "branch", "attachments", "approval"):

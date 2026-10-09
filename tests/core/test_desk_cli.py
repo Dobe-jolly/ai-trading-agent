@@ -9,6 +9,7 @@ import pytest
 from agentcore.cli import DeskCli
 
 DESK_COMMANDS = {
+    "router": {"topics"},
     "sms_alerts": {"check-account", "anomalies"},
     "ecocash": {"lookup", "monitor", "anomalies"},
     "failed_txn": {"find-transactions"},

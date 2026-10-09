@@ -1,0 +1,9 @@
+Dear {owner_name},
+
+Ticket #{number} has been updated:
+
+{reply}
+
+{ticket_link}
+
+{signature}

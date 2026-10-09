@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any, Optional
+from typing import Any, ClassVar, Optional
 
 REPLY_AND_CLOSE = "reply_and_close"
 REQUEST_INFO = "request_info"
 ESCALATE = "escalate"
 NO_ACTION = "no_action"
 ACTIONS = (REPLY_AND_CLOSE, REQUEST_INFO, ESCALATE, NO_ACTION)
+MOVE = "move"  # the router: file the ticket under the help topic it belongs to (not offered to the other desks)
+ALL_ACTIONS = ACTIONS + (MOVE,)
 REPLY_ACTIONS = (REPLY_AND_CLOSE, REQUEST_INFO)
 
 def submit_decision_tool(*, close_help: str, ask_help: str, category_help: str, standard_help: str) -> dict[str, Any]:
@@ -62,6 +64,7 @@ SUBMIT_DECISION_TOOL = submit_decision_tool(
 
 @dataclass
 class Decision:
+    actions: ClassVar[tuple] = ACTIONS  # what submit_decision may choose; a desk's subclass can widen it
     action: str
     confidence: float
     category: str
@@ -76,8 +79,8 @@ class Decision:
         if not isinstance(data, dict):
             raise ValueError("Decision must be an object")
         action = str(data.get("action", "")).strip()
-        if action not in ACTIONS:
-            raise ValueError(f"action must be one of {', '.join(ACTIONS)}")
+        if action not in cls.actions:
+            raise ValueError(f"action must be one of {', '.join(cls.actions)}")
         try:
             confidence = float(data.get("confidence"))
         except (TypeError, ValueError):
@@ -101,7 +104,13 @@ class Decision:
             evidence=[str(item) for item in evidence][:20],
             reply_text=reply_text if action in REPLY_ACTIONS else "",
             standard=data["follows_standard_outcome"] if isinstance(data.get("follows_standard_outcome"), bool) else None,
+            **cls.extra_fields(action, data),
         )
+
+    @classmethod
+    def extra_fields(cls, action: str, data: dict[str, Any]) -> dict[str, Any]:
+        """A subclass's own fields from the tool input (raise ValueError when unusable)."""
+        return {}
 
     @classmethod
     def fallback(cls, reason: str, action: str = ESCALATE) -> "Decision":

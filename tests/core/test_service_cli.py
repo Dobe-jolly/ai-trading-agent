@@ -24,7 +24,8 @@ def calls(monkeypatch, tmp_path):
 
 def test_run_visits_every_desk_in_order_and_reports_the_worst(calls):
     assert cli.main(["run", "--mode", "shadow", "--limit", "5"]) == 3
-    assert calls == [("sms_alerts", ["run", "--mode", "shadow", "--limit", "5"]),
+    assert calls == [("router", ["run", "--mode", "shadow", "--limit", "5"]),  # first: it files tickets for the rest
+                     ("sms_alerts", ["run", "--mode", "shadow", "--limit", "5"]),
                      ("ecocash", ["run", "--mode", "shadow", "--limit", "5"]),
                      ("failed_txn", ["run", "--mode", "shadow", "--limit", "5"])]
 
@@ -54,6 +55,7 @@ def test_desk_commands_go_to_their_desk(calls):
     cli.main(["lookup", "--mobile", "0771234567"])
     cli.main(["check-account", "--account", "1"])
     cli.main(["find-transactions", "--account", "1"])
+    cli.main(["topics"])
     with pytest.raises(SystemExit, match="Say which desk"):
         cli.main(["audit", "--since", "2026-10-01"])
     cli.main(["audit", "--desk", "sms_alerts", "--since", "2026-10-01"])
@@ -62,4 +64,5 @@ def test_desk_commands_go_to_their_desk(calls):
     assert calls == [("ecocash", ["lookup", "--mobile", "0771234567"]),
                      ("sms_alerts", ["check-account", "--account", "1"]),
                      ("failed_txn", ["find-transactions", "--account", "1"]),
+                     ("router", ["topics"]),
                      ("sms_alerts", ["audit", "--since", "2026-10-01"])]

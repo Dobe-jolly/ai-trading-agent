@@ -48,6 +48,7 @@ class TicketAgent:
     result_type (an AgentResult with its own Evidence) and instruction; its toolbox has
     run(name, args, pseudo, evidence, ticket) -> (masked text, is_error)."""
     result_type: Any = None  # set by the agent
+    decision_type: Any = Decision  # a desk with its own decision fields sets its subclass
     instruction = "Investigate with the lookups, then call submit_decision."
 
     @staticmethod
@@ -127,7 +128,7 @@ class TicketAgent:
             for use in tool_uses:
                 if use["name"] == "submit_decision":
                     try:
-                        decision = Decision.from_tool_input(use.get("input") or {})
+                        decision = self.decision_type.from_tool_input(use.get("input") or {})
                         output, is_error = "Decision recorded.", False
                         self._step(f"decided: {decision.action} ({decision.confidence:.0%})")
                     except ValueError as exc:

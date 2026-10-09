@@ -22,6 +22,9 @@ class TicketWriter:
     def note(self, ticket: Ticket, text: str, marker: Optional[str] = None) -> bool:
         raise NotImplementedError
 
+    def set_topic(self, ticket: Ticket, from_topic_id: int, to_topic_id: int) -> None:
+        raise NotImplementedError
+
 
 class ShadowWriter(TicketWriter):
     """Changes nothing; remembers what it would have done (tests and dry runs)."""
@@ -44,6 +47,9 @@ class ShadowWriter(TicketWriter):
         self.calls.append(("note", ticket.number, text))
         return True
 
+    def set_topic(self, ticket: Ticket, from_topic_id: int, to_topic_id: int) -> None:
+        self.calls.append(("topic", ticket.number, f"{from_topic_id} -> {to_topic_id}"))
+
 
 class OsTicketWriter(TicketWriter):
     name = "osticket"
@@ -65,3 +71,6 @@ class OsTicketWriter(TicketWriter):
 
     def note(self, ticket: Ticket, text: str, marker: Optional[str] = None) -> bool:
         return self.store.post_note(ticket, self.staff_id, self.poster, text, marker)
+
+    def set_topic(self, ticket: Ticket, from_topic_id: int, to_topic_id: int) -> None:
+        self.store.set_topic(ticket, from_topic_id, to_topic_id)

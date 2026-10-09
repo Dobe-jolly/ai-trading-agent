@@ -35,6 +35,9 @@ class Desk:
 
 
 ALL = {
+    "router": Desk("router", "Router", "ROUTER", ("topics",),
+                   "Tickets under a catch-all topic or none: works out the help topic they belong under and files "
+                   "them there, or suggests it to staff."),
     "sms_alerts": Desk("sms_alerts", "SMS Alerts", "SMS_ALERTS", ("check-account",),
                        "Clients not receiving SMS alerts: checks registration, the CAE request and the gateway."),
     "ecocash": Desk("ecocash", "EcoCash", "ECOCASH", ("lookup", "monitor"),
@@ -43,7 +46,8 @@ ALL = {
                        "ZIPIT, B2W/W2B, card, NMB Connect, airtime and bill payments: the switch, the billers and "
                        "core banking."),
 }
-DEFAULT_ORDER = "sms_alerts,ecocash,failed_txn"
+# The router goes first: a ticket it files under a desk's topic is picked up by that desk in the same pass.
+DEFAULT_ORDER = "router,sms_alerts,ecocash,failed_txn"
 
 
 def enabled() -> list[Desk]:

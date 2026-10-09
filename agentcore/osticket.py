@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import binascii
 import html
+import json
 import logging
 import re
 from dataclasses import dataclass, field
@@ -44,20 +45,60 @@ JOIN ost_ticket_status s ON (t.status_id = s.id)
 WHERE t.ticket_id = {{ticket_id}}"""
 
 
+# osTicket keeps some names with stray spaces or a trailing slash ('Ecocash / Failed Transactions / '); compare
+# names without them, as the people who configure the agents write them.
+FOLDED_TOPIC_PATH = f"TRIM(TRIM(TRAILING '/' FROM TRIM({TOPIC_PATH})))"
+
+
+def fold_topic(name: Optional[str]) -> str:
+    """A help topic name as compared: case, runs of spaces and a trailing ' /' do not matter."""
+    text = " ".join((name or "").split()).upper()
+    while text.endswith("/"):
+        text = text[:-1].rstrip()
+    return text
+
+
+# Form fields captured on tickets (osTicket dynamic forms), by ticket.
+FIELDS_SQL = """SELECT e.object_id AS ticket_id, f.label, f.name, v.value
+FROM ost_form_entry e
+JOIN ost_form_entry_values v ON (v.entry_id = e.id)
+JOIN ost_form_field f ON (f.id = v.field_id)
+WHERE e.object_type = 'T' AND e.object_id IN ({ticket_ids})
+ORDER BY e.object_id, e.id, f.sort"""
+SKIP_FIELDS = {"subject", "priority", "message"}
+
+
+def field_value(raw: Any) -> Optional[str]:
+    """osTicket stores choice fields as JSON ({"3": "Harare Main"} or a list); plain text as is."""
+    text = trim_to_none(raw)
+    if text is None:
+        return None
+    if text[:1] in "{[":
+        try:
+            value = json.loads(text)
+        except ValueError:
+            return text
+        if isinstance(value, dict):
+            return ", ".join(str(v) for v in value.values() if v not in (None, "")) or None
+        if isinstance(value, list):
+            return ", ".join(str(v) for v in value if v not in (None, "")) or None
+    return text
+
+
 def topic_condition(topics: Iterable[str]) -> str:
     """The topic or any of its subtopics, case-insensitive (SQL)."""
     parts = []
     for topic in topics:
-        t = sql.mysql_text(topic.strip().upper())
+        t = sql.mysql_text(fold_topic(topic))
         if t:
-            parts.append(f"UPPER({TOPIC_PATH}) = '{t}' OR UPPER({TOPIC_PATH}) LIKE '{sql.like_fragment(t)} / %'")
+            parts.append(f"UPPER({FOLDED_TOPIC_PATH}) = '{t}' OR UPPER({TOPIC_PATH}) LIKE '{sql.like_fragment(t)} / %'")
     return "(" + " OR ".join(parts) + ")" if parts else "(1 = 0)"
 
 
 def topic_matches(topic: Optional[str], topics: Iterable[str]) -> bool:
     """The same test in Python: the topic is one of these or a subtopic of one."""
-    topic = (topic or "").strip().upper()
-    return any(topic == x.strip().upper() or topic.startswith(x.strip().upper() + " / ") for x in topics if x.strip())
+    topic = fold_topic(topic)
+    return bool(topic) and any(topic == x or topic.startswith(x + " / ") for x in map(fold_topic, topics) if x)
 
 
 def html_to_text(body: Any) -> str:
@@ -423,6 +464,22 @@ WHERE ticket_id = {sql.integer(ticket.ticket_id)}""")
             ok = False
         if not ok:
             raise MetabaseError(f"Ticket close verification failed for ticket {ticket.ticket_id}")
+
+    def set_topic(self, ticket: Any, from_topic_id: int, to_topic_id: int) -> None:
+        """File the ticket under another help topic, only if it is still under the one it was read under."""
+        tid = sql.integer(ticket.ticket_id)
+        self.mb.write(self.db, f"""UPDATE ost_ticket
+SET topic_id = {sql.integer(to_topic_id)},
+    lastupdate = NOW(),
+    updated = NOW()
+WHERE ticket_id = {tid} AND topic_id = {sql.integer(from_topic_id)}""")
+        rows = self.mb.query(self.db, f"SELECT topic_id FROM ost_ticket WHERE ticket_id = {tid}")
+        try:
+            ok = bool(rows) and int(rows[0].get("topic_id")) == int(to_topic_id)
+        except (TypeError, ValueError):
+            ok = False
+        if not ok:
+            raise MetabaseError(f"Help topic change verification failed for ticket {ticket.ticket_id}")
 
     def post_note(self, ticket: Any, staff_id: int, poster: str, note: str, marker: Optional[str] = None) -> bool:
         """Internal note ('N'). Returns False when skipped as a duplicate (marker or exact body)."""

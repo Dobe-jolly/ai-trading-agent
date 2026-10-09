@@ -2,7 +2,6 @@
 and what the ticket owner gave (accounts, mobiles, references, amounts). Reads and writes are the shared ones."""
 from __future__ import annotations
 
-import json
 import logging
 import re
 from dataclasses import dataclass, field
@@ -12,6 +11,8 @@ from typing import Any, ClassVar, Optional
 from agentcore import sql
 from agentcore.metabase import MetabaseClient
 from agentcore.osticket import (  # noqa: F401 - shared, re-exported for this desk's modules and tests
+    FIELDS_SQL,
+    SKIP_FIELDS,
     OPTIONAL_TOPIC_JOINS,
     TOPIC_PATH,
     OsTicketBase,
@@ -19,6 +20,7 @@ from agentcore.osticket import (  # noqa: F401 - shared, re-exported for this de
     TicketState,
     TicketThread,
     closed_date,
+    field_value,
     topic_condition,
     topic_matches,
 )
@@ -40,13 +42,6 @@ TOPIC_JOINS = OPTIONAL_TOPIC_JOINS
 ESCALATION_NOTE_MARKER = "Failed-transactions agent did not auto-close this ticket."
 RECOMMENDATION_NOTE_MARKER = "Failed-transactions AI agent recommendation (not posted to the ticket owner)."
 
-FIELDS_SQL = """SELECT e.object_id AS ticket_id, f.label, f.name, v.value
-FROM ost_form_entry e
-JOIN ost_form_entry_values v ON (v.entry_id = e.id)
-JOIN ost_form_field f ON (f.id = v.field_id)
-WHERE e.object_type = 'T' AND e.object_id IN ({ticket_ids})
-ORDER BY e.object_id, e.id, f.sort"""
-SKIP_FIELDS = {"subject", "priority", "message"}
 DATE_IN_TEXT = re.compile(r"\b(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|"
                           r"aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{4})\b", re.I)
 
@@ -66,23 +61,6 @@ LEFT JOIN ost_organization o ON (o.id = u.org_id)
 WHERE s.state = '{"closed" if state == "closed" else "open"}'
   AND {by_topic}{excluded}{closed}
 ORDER BY t.number DESC"""
-
-
-def field_value(raw: Any) -> Optional[str]:
-    """osTicket stores choice fields as JSON ({"3": "Harare Main"} or a list); plain text as is."""
-    text = trim_to_none(raw)
-    if text is None:
-        return None
-    if text[:1] in "{[":
-        try:
-            value = json.loads(text)
-        except ValueError:
-            return text
-        if isinstance(value, dict):
-            return ", ".join(str(v) for v in value.values() if v not in (None, "")) or None
-        if isinstance(value, list):
-            return ", ".join(str(v) for v in value if v not in (None, "")) or None
-    return text
 
 
 @dataclass

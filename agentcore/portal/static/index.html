@@ -450,12 +450,24 @@ function demoPost(path, body) {
 }
 
 /* ---------------- vocabulary ---------------- */
-const ACTIONS = {
-  reply_and_close: { label: "Replied & closed", short: "Closed", cls: "ok", fill: "f-close" },
-  request_info: { label: "Asked the owner", short: "Asked", cls: "ask", fill: "f-ask" },
-  escalate: { label: "Escalated to staff", short: "Escalated", cls: "crit", fill: "f-esc" },
-  no_action: { label: "No action", short: "None", cls: "idle", fill: "f-none" },
+/* Outcome wording. A desk can rename them and say which it uses (vocab.actions), e.g. the router moves tickets. */
+const BASE_ACTIONS = {
+  reply_and_close: { label: "Replied & closed", short: "Closed", series: "Replied & closed", cls: "ok", fill: "f-close", kpi: "closed", tile: "Replied & closed", sub: "of decisions" },
+  request_info: { label: "Asked the owner", short: "Asked", series: "Asked the owner", cls: "ask", fill: "f-ask", kpi: "request_info", tile: "Asked the owner", sub: "missing or wrong details" },
+  escalate: { label: "Escalated to staff", short: "Escalated", series: "Escalated", cls: "crit", fill: "f-esc", kpi: "escalated", tile: "Escalated", sub: "internal note for staff" },
+  no_action: { label: "No action", short: "None", series: "No action", cls: "idle", fill: "f-none", kpi: "no_action", tile: "No action", sub: "" },
+  move: { label: "Moved to its topic", short: "Moved", series: "Moved", cls: "ok", fill: "f-info", kpi: "moved", tile: "Moved", sub: "of decisions" },
 };
+const DEFAULT_DESK_ACTIONS = ["reply_and_close", "request_info", "escalate", "no_action"];
+const ACTIONS = {};
+let DESK_ACTIONS = DEFAULT_DESK_ACTIONS;
+function setActions(vocab) {
+  const named = (vocab && vocab.actions) || {};
+  DESK_ACTIONS = Object.keys(named).length ? Object.keys(named) : DEFAULT_DESK_ACTIONS;
+  for (const k of Object.keys(ACTIONS)) delete ACTIONS[k];
+  for (const [k, v] of Object.entries(BASE_ACTIONS)) ACTIONS[k] = { ...v, ...(named[k] || {}) };
+}
+setActions(null);
 let STATUS = {};  /* the desk's status labels, from the service (see setDesk) */
 const MODES = { live: ["ok", "Live"], notes: ["ask", "Notes only"], shadow: ["idle", "Shadow"], audit: ["idle", "Audit replay"] };
 
@@ -480,10 +492,15 @@ function ago(iso) {
 }
 const actionPill = a => { const x = ACTIONS[a] || { label: a || "–", cls: "idle" }; return `<span class="pill ${x.cls}"><span class="dot"></span>${esc(x.label)}</span>`; };
 const HELD = { label: "Waiting for approval", short: "Waiting", cls: "warn" };
-/* A reply held in Approvals is not an outcome yet: the posted reply (or the escalation, if rejected) is recorded again. */
-const isHeld = d => Boolean(d && (d.held || (d.executed || []).includes("awaiting approval")));
+/* A reply held in Approvals is not an outcome itself: what a person decided is recorded as its own decision
+   (the posted reply, or the escalation if rejected). Until then it waits; afterwards it says what became of it. */
+const AFTER_APPROVAL = { posted: ["idle", "Approved, then posted"], rejected: ["idle", "Rejected in Approvals"],
+  escalated: ["idle", "Rejected, escalated"], dropped: ["idle", "Dropped: the ticket changed"], failed: ["crit", "Approved; posting failed"] };
+const isHeld = d => Boolean(d && (d.held !== undefined ? d.held : (d.executed || []).includes("awaiting approval")));
+const pill = (cls, label, title = "") => `<span class="pill ${cls}" ${title ? `title="${esc(title)}"` : ""}><span class="dot"></span>${esc(label)}</span>`;
 const outcomePill = d => d.error ? `<span class="pill crit">Error</span>`
-  : isHeld(d) ? `<span class="pill ${HELD.cls}" title="Held in Approvals; nothing posted yet"><span class="dot"></span>${HELD.label}</span>`
+  : isHeld(d) ? pill(HELD.cls, HELD.label, "Held in Approvals; nothing posted yet")
+  : d.approval && AFTER_APPROVAL[d.approval] ? pill(...AFTER_APPROVAL[d.approval], "The reply was held for approval; see the decision recorded after it")
   : actionPill(d.final_action);
 const statusChip = s => { const [cls, text] = STATUS[s] || ["", s]; return `<span class="chip ${cls}" title="${esc(text)}">${esc(s)}</span>`; };
 const statusChips = map => { const v = Object.values(map || {}); return v.length ? `<span class="chips">${v.map(statusChip).join("")}</span>` : `<span class="faint">–</span>`; };
@@ -639,7 +656,7 @@ function pickDesk(service) {
 function setDesk(key) {
   DESK = key;
   const desk = S.service.desks.find(x => x.key === key);
-  V = desk.vocab; STATUS = V.status || {};
+  V = desk.vocab; STATUS = V.status || {}; setActions(V);
   try { localStorage.setItem("nmbz-desk", key); } catch (_) { /* remembering the desk is optional */ }
   $("#brand-desk").textContent = V.agent || desk.title;
   document.title = `${desk.title} · Helpdesk Agents Console`;
@@ -673,12 +690,7 @@ async function loadSession() {
 
 /* ---------------- pages ---------------- */
 const PAGES = {};
-const ACTION_SERIES = [
-  { key: "reply_and_close", label: "Replied & closed", fill: "f-close" },
-  { key: "request_info", label: "Asked the owner", fill: "f-ask" },
-  { key: "escalate", label: "Escalated", fill: "f-esc" },
-  { key: "no_action", label: "No action", fill: "f-none" },
-];
+const actionSeries = () => DESK_ACTIONS.map(k => ({ key: k, label: ACTIONS[k].series, fill: ACTIONS[k].fill }));
 
 function decisionsTable(items, opts = {}) {
   if (!items.length) return `<p class="empty">${esc(opts.empty || "No decisions match.")}</p>`;
@@ -705,9 +717,8 @@ PAGES.overview = async () => {
     ${S.session && S.session.anomaly && S.session.anomaly.severity !== "ok" ? `<a href="#anomalies" class="panel" style="text-decoration:none;color:inherit;border-left:4px solid ${S.session.anomaly.severity === "incident" ? "var(--crit)" : "var(--warn)"};border-radius:0 8px 8px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap">${sevPill(S.session.anomaly.severity)}<b>${esc(S.session.anomaly.headline)}</b><span class="faint">${esc(ago(S.session.anomaly.created_at))} · see Anomalies</span></a>` : ""}
     <div class="kpis">
       <div class="kpi"><span class="label">Tickets decided</span><b>${fmtInt(k.decided)}</b><small>${k.other_topics ? fmtInt(k.other_topics) + " found under other topics · " : ""}${k.held ? fmtInt(k.held) + " waiting for approval · " : ""}${fmtInt(k.deferred)} retried later</small></div>
-      <div class="kpi"><span class="label">Replied &amp; closed</span><b>${fmtInt(k.closed)}</b><small>${pct(k.closed, k.decided)} of decisions</small></div>
-      <div class="kpi"><span class="label">Asked the owner</span><b>${fmtInt(k.request_info)}</b><small>missing or wrong details</small></div>
-      <div class="kpi"><span class="label">Escalated</span><b>${fmtInt(k.escalated)}</b><small>internal note for staff</small></div>
+      ${DESK_ACTIONS.filter(a => a !== "no_action").map(a => { const x = ACTIONS[a]; const n = k[x.kpi];
+        return `<div class="kpi"><span class="label">${esc(x.tile)}</span><b>${fmtInt(n)}</b><small>${x.sub === "of decisions" ? `${pct(n, k.decided)} of decisions` : esc(x.sub)}</small></div>`; }).join("")}
       <div class="kpi ${k.guardrail_changed ? "flag" : ""}"><span class="label">Safety stops</span><b>${fmtInt(k.guardrail_changed)}</b><small>proposal overruled by rules</small></div>
       <div class="kpi ${k.fallback ? "flag" : ""}"><span class="label">Rules fallback</span><b>${fmtInt(k.fallback)}</b><small>Claude unreachable</small></div>
       <div class="kpi ${k.emails_failed ? "flag" : ""}"><span class="label">Branch emails</span><b>${fmtInt(k.emails_sent)}</b><small>${k.emails_failed ? `${fmtInt(k.emails_failed)} failed · ` : ""}${k.emails_pending ? `${fmtInt(k.emails_pending)} waiting · ` : ""}${S.session && S.session.notify_transport === "off" ? "switched off" : "sent to ticket owners"}</small></div>
@@ -715,7 +726,7 @@ PAGES.overview = async () => {
     </div>
     <div class="grid-even">
       <section class="panel chart"><header><div><h2>Decisions per day</h2><p>Every decision the agent made, by outcome.</p></div></header>
-        ${stackedBars(o.by_day, ACTION_SERIES, { label: "Decisions per day by outcome" })}${legend(ACTION_SERIES)}</section>
+        ${stackedBars(o.by_day, actionSeries(), { label: "Decisions per day by outcome" })}${legend(actionSeries())}</section>
       <section class="panel chart"><header><div><h2>${esc(V.chart.title)}</h2><p>${esc(V.chart.desc)}</p></div></header>
         ${stackedBars(o[V.chart.key] || [], V.chart.series, { label: V.chart.label })}${legend(V.chart.series)}
         ${(V.chart.hops || []).length ? `<div class="hops">${V.chart.hops.map(h => `<span>${esc(h)}</span>`).join("→")}</div>` : ""}</section>
@@ -840,7 +851,7 @@ PAGES.decisions = async () => {
     ${exportHref ? `<a class="btn" href="${esc(exportHref)}">Export CSV</a>` : `<span class="faint" title="Export works on the portal server">Export CSV (on the server)</span>`}</div>
   <form class="filters" id="filters">
     <div class="field"><label for="f-days">Period</label><select id="f-days" data-filter="days">${opt([["1", "Today"], ["7", "7 days"], ["14", "14 days"], ["30", "30 days"], ["90", "90 days"]], f.days)}</select></div>
-    <div class="field"><label for="f-action">Outcome</label><select id="f-action" data-filter="action">${opt([["", "Any"], ...Object.entries(ACTIONS).map(([k, v]) => [k, v.label]), ["held", HELD.label]], f.action)}</select></div>
+    <div class="field"><label for="f-action">Outcome</label><select id="f-action" data-filter="action">${opt([["", "Any"], ...DESK_ACTIONS.map(k => [k, ACTIONS[k].label]), ["held", HELD.label]], f.action)}</select></div>
     <div class="field"><label for="f-status">Check status</label><select id="f-status" data-filter="status">${opt([["", "Any"], ...Object.keys(STATUS).map(k => [k, k])], f.status)}</select></div>
     <div class="field"><label for="f-mode">Mode</label><select id="f-mode" data-filter="mode">${opt([["", "Live, notes & shadow"], ["live", "Live"], ["notes", "Notes"], ["shadow", "Shadow"], ["audit", "Audit replays"]], f.mode)}</select></div>
     <div class="field"><label for="f-flag">Flag</label><select id="f-flag" data-filter="flag">${opt([["", "Any"], ["guardrail", "Safety stop"], ["fallback", "Rules fallback"], ["error", "Error"]], f.flag)}</select></div>
@@ -878,7 +889,9 @@ PAGES.decision = async () => {
   const d = await apiGet(`/api/decisions/${encodeURIComponent(S.id)}`);
   const accounts = Object.entries(d.statuses || {});
   const canReview = !!S.session;
-  const replyLabel = { live: "Posted to the ticket", notes: "Proposed in a staff note", shadow: "Would have posted (shadow)", audit: "Agent's reply in the replay" }[d.mode] || "Reply";
+  const replyLabel = isHeld(d) ? "Waiting for approval (not posted yet)"
+    : d.approval && AFTER_APPROVAL[d.approval] ? `Held for approval: ${AFTER_APPROVAL[d.approval][1].toLowerCase()}`
+    : { live: "Posted to the ticket", notes: "Proposed in a staff note", shadow: "Would have posted (shadow)", audit: "Agent's reply in the replay" }[d.mode] || "Reply";
   return `<div class="head"><div>
       <a href="#decisions" class="faint">← Decisions</a>
       <h1 style="margin-top:6px">Ticket ${ticketLink(d.ticket_number, d.ticket_id)}</h1>
@@ -926,7 +939,7 @@ PAGES.decision = async () => {
             <label><input type="radio" name="verdict" value="correct" id="rv-ok"><span>Correct</span></label>
             <label><input type="radio" name="verdict" value="incorrect" id="rv-bad"><span>Wrong</span></label></div>
           <div class="field" id="rv-expected" hidden><label for="rv-action">It should have</label>
-            <select id="rv-action" name="expected_action"><option value="">–</option>${Object.entries(ACTIONS).map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join("")}</select></div>
+            <select id="rv-action" name="expected_action"><option value="">–</option>${DESK_ACTIONS.map(k => `<option value="${k}">${esc(ACTIONS[k].label)}</option>`).join("")}</select></div>
           <div class="field"><label for="rv-comment">Comment</label><textarea id="rv-comment" name="comment" maxlength="2000" placeholder="What should it have done or said?"></textarea></div>
           <div><button class="btn primary" type="submit">Save review</button></div></form>` : ""}
         ${(d.reviews || []).map(r => `<div class="review-item"><span class="chip ${r.verdict === "correct" ? "ok" : "crit"}">${esc(r.verdict)}</span>

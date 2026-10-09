@@ -72,6 +72,7 @@ class Portal:
         self.users = users or UserStore(settings.portal_users_file)
         audit = AuditLog(settings.state_db)  # make sure the schema exists
         audit.db.executescript(OUTBOX_SCHEMA)
+        ApprovalStore(audit.db)  # the decision lists read each held reply's approval
         audit.close()
         self._auth_cache: dict[str, tuple[str, float]] = {}
         self._failures: dict[str, list[float]] = {}
