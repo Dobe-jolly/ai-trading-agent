@@ -4,6 +4,15 @@ Served to the page with the desk list, so the page itself has no desk-specific w
 VOCAB = {
     "title": "NMB Connect",
     "agent": "NMB Connect agent",
+    # Outcomes in the order the overview shows them. Asking is usually the branch acting (delete the profile, have
+    # the number updated) and reporting back, not only missing details.
+    "actions": {
+        "reply_and_close": {},
+        "request_info": {"label": "Asked the branch", "short": "Asked", "series": "Asked the branch",
+                         "tile": "Asked the branch", "sub": "to act and report back, or for details"},
+        "escalate": {},
+        "no_action": {},
+    },
     "status": {
         "registered": ["ok", "Registered with the right number: advice for the client"],
         "not_registered": ["ok", "Not registered: the branch registers the client"],
@@ -49,8 +58,8 @@ VOCAB = {
         ],
         "hops": ["NMB Connect profile", "core banking CIF", "app activity", "SMS gateway"],
     },
-    "found_heading": "Where the clients stood",
-    "found_sub": "What the assessment found behind each decision.",
+    "found_heading": "What the assessments found",
+    "found_sub": "Where the client stood behind each decision.",
     "found_col": "Assessment",
     "found_none": "No client was assessed.",
     "queue_sub": "Every open NMB Connect ticket (registration, login, OTP, username, accounts)",

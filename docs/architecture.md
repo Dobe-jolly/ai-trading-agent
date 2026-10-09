@@ -40,7 +40,7 @@ agent host (RHEL)                                   integrations host
   nmbz-console ─► one console, port 8085 (behind F5/nginx, TLS)
         │                        │                    │
         ▼                        ▼                    ▼
-  Metabase API ──► osTicket, core banking (standby), Postilion, CONECT, billers, IB, SMS gateway, EcoCash monitor
+  Metabase API ──► osTicket, core banking (standby), Postilion, CONECT and its registrations, billers, IB, SMS gateway, EcoCash monitor
   api.anthropic.com (443, via the bank's proxy if there is one)
   notification gateway or SMTP ──► branch e-mails, admin SMS
 ```
@@ -52,11 +52,12 @@ agent host (RHEL)                                   integrations host
 | A. Finish the rule rollout | Superseded: the rules were ported into the desks as guardrails and fallback rules. |
 | B. Extraction and classification | Done inside each desk: Claude reads the ticket. The SMS desk also triages tickets filed under other topics. |
 | C. Retrieval and drafting | Drafting done. Retrieval over resolved tickets ("the last 12 like this were fixed by ...") is not built yet. |
-| D. Evidence-gated auto-close | Built for SMS Alerts, EcoCash linking and failed transactions, each starting in shadow, then notes, then live. The router files tickets from catch-all topics under the topic a desk works. |
+| D. Evidence-gated auto-close | Built for SMS Alerts, EcoCash linking, failed transactions and NMB Connect registration and login, each starting in shadow, then notes, then live. The router files tickets from catch-all topics under the topic a desk works. |
 | E. Continuous adaptation | Partly: the anomaly watch, the audit replay of closed tickets, and review marks in the console. Mining new patterns into proposed rules is not built. |
 
 ## Next desks
 
-The router is built ([docs/router.md](router.md)). Next, in the order proposed: NMB Connect registration and login,
-internet banking, and the HelpDesk topics. Each is a package beside the others (see "Adding a desk" in the
-[README](../README.md#adding-a-desk)); once a desk works a topic, the router moves tickets to it on its own.
+The router ([docs/router.md](router.md)) and NMB Connect registration and login ([docs/nmb_connect.md](nmb_connect.md))
+are built. Next, in the order proposed: internet banking, and the HelpDesk topics. Each is a package beside the
+others (see "Adding a desk" in the [README](../README.md#adding-a-desk)); once a desk works a topic, the router moves
+tickets to it on its own.
