@@ -1,0 +1,8 @@
+{
+  "service": "ussd",
+  "format": "journald",
+  "about": "USSD gateway and menu engine for Econet, NetOne and Telecel sessions: inbound/outbound messages, menu handlers (loans, bundles, payees, promotions), a PostgreSQL pool, calls to downstream services",
+  "correlation": {
+    "sessionId": "(?i)\\bsessionId=([^,\\s)]{4,80})"
+  }
+}

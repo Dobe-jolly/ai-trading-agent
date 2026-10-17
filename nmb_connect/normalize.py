@@ -24,9 +24,9 @@ from agentcore.normalize import (  # noqa: F401 - shared helpers, re-exported fo
 )
 from agentcore.normalize import format_timestamp as _format_timestamp
 
-# "CIF 1234567", "CIF no: 1234567", "cif-1234567", "Customer number 1234567"
+# "CIF 1234567", "CIF no: 1234567", "cif-1234567", "Customer number 1234567", "CIF is 1234567"
 CIF_RE = re.compile(r"(?i)\b(?:cif|customer\s*(?:no|number|#)|client\s*(?:no|number|#))\s*(?:no\.?|number|#)?"
-                    r"\s*[:#=.\-]?\s*(\d{4,12})\b")
+                    r"\s*(?:(?:is|was)\b\s*)?[:#=.\-]?\s*(\d{4,12})\b")
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
 

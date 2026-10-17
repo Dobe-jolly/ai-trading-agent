@@ -37,6 +37,7 @@ def render_ticket(ticket: Ticket, as_of: Optional[str] = None, agent_staff_id: O
         "",
         "Details the ticket owner gave (form, messages and their attachments):",
         "  Account numbers: " + (", ".join(sorted(found.accounts)) or "(none)"),
+        "  CIF / customer numbers: " + (", ".join(sorted(found.cifs)) or "(none)"),
         "  References: " + (", ".join(sorted(found.references)) or "(none)"),
         "  Amounts: " + (", ".join(f"{a:,.2f}" for a in sorted(found.amounts)) or "(none)"),
         "  Dates: " + (", ".join(d.isoformat() for d in sorted(found.dates)) or "(none)"),

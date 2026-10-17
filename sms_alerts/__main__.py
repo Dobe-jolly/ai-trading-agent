@@ -26,6 +26,7 @@ import sys
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
+from agentcore.dataquery import build_for_desk, check_lines
 from agentcore.audit import AuditLog
 from agentcore.cli import DeskCli
 from agentcore.metabase import MetabaseClient, MetabaseError
@@ -69,8 +70,6 @@ def load_prompt(s: Settings) -> str:
 
 
 def build_runner(s: Settings, mode: str, mb: MetabaseClient, audit: AuditLog):
-    import anthropic
-
     from .loop import TicketAgent
     from .runner import Runner
     from agentcore.writer import OsTicketWriter, ShadowWriter
@@ -83,8 +82,11 @@ def build_runner(s: Settings, mode: str, mb: MetabaseClient, audit: AuditLog):
 
         pending_db = mb.try_resolve(s.pending_changes_db_name) if s.pending_changes_db_name else None
         lookups = Lookups(mb, checks, s.pending_changes_sql, pending_db)
-    toolbox = Toolbox(checks, pipeline_trace_enabled=s.pipeline_trace_enabled, lookups=lookups)
-    client = anthropic.Anthropic(api_key=s.anthropic_api_key, max_retries=3)
+    toolbox = Toolbox(checks, pipeline_trace_enabled=s.pipeline_trace_enabled, lookups=lookups,
+                      data=build_for_desk(mb, "sms_alerts", s.query_data, s.data_catalogue))
+    from agentcore.sdk_backend import build_client
+
+    client = build_client(s, 3)
     agent = TicketAgent(
         client, model=s.model, system_prompt=load_prompt(s), toolbox=toolbox,
         max_turns=s.max_agent_turns, agent_staff_id=s.reply_staff_id,
@@ -182,6 +184,8 @@ class SmsAlertsCli(DeskCli):
             table = s.tran_table_pattern.replace("{year}", str(date.today().year))
             mb.query(standby, f"SELECT 1 AS ok FROM {table} WHERE ROWNUM <= 1")
             print(f"[standby] {table} readable")
+        for line in check_lines(build_for_desk(mb, "sms_alerts", s.query_data, s.data_catalogue), s.query_data):
+            print(line)
         return ok
 
     def add_commands(self, sub: Any) -> dict:

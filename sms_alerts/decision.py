@@ -6,5 +6,5 @@ SUBMIT_DECISION_TOOL = submit_decision_tool(
     close_help='the checks explain the issue and the reply tells the branch what to do',
     ask_help='one specific detail is missing or contradictory (e.g. no account number)',
     category_help='The main check status behind the decision (e.g. delivered_check_spam, different_number, socket_failed, missing_account_number).',
-    standard_help='true when the action and reply follow the standard wording for the check statuses; false when you reasoned beyond them (lookups, the thread, attachments) to an outcome the standard check would not give.',
+    standard_help='true when your action is the one the check statuses suggest and your reply says the same thing in substance (your own wording is fine); false when you reasoned beyond them (lookups, the thread, attachments) to a different action or explanation.',
 )

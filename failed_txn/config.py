@@ -13,6 +13,7 @@ from typing import Optional, Union
 from dotenv import load_dotenv
 
 from agentcore.config import Env
+from agentcore.sdk_backend import backend_problems
 from agentcore.sql import TRAN_PATTERN_RE
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -70,11 +71,31 @@ class Settings:
     lookback_days: int
     date_window_days: int
     tran_table_pattern: str
+    # Postilion: post_tran_leg (the bank's report query: nodes and merchant) or post_tran (the Java's columns)
+    postilion_table: str = "post_tran_leg"
+    # EcoCash links (wallet <-> account): registration log in the "Ecocash Reg" database
+    ecocash_reg_db_name: str = "Ecocash Reg"
+    ecocash_reg_table: str = "public.ecocash_registration"
+    # query_data: read-only look into the approved tables of the bank's other databases (agentcore.dataquery)
+    query_data: bool = True
+    query_close: bool = False  # a ticket may close on what query_data found (with core banking's postings checked)
+    data_catalogue: Optional[Path] = None  # None: agentcore/data_catalogue.json
+    # explore_data / query_tables: the agent explores the approved databases' schema and reads joined tables
+    # (agentcore.schemaquery; the schema files are built by tools/build_schema.py)
+    query_tables: bool = True
+    # log_errors / log_search: the ingested application logs (agentcore.logs; LOG_HASH_KEY keys the identifier hashes)
+    query_logs: bool = True
+    log_db: Optional[Path] = None  # None: state/logs.db
+    log_hash_key: str = ""
+    schema_dir: Optional[Path] = None  # None: agentcore/schema
     # Portal
     portal_host: str = "127.0.0.1"
     portal_port: int = 8085
     portal_users_file: Path = BASE_DIR / "state/portal_users.json"
     portal_stale_minutes: int = 40
+    knowledge_max_chars: int = 16000  # prompt space for switched-on staff notes (agentcore.knowledge)
+    claude_code_oauth_token: Optional[str] = None  # a Claude subscription through the Agent SDK (agentcore.sdk_backend)
+    model_backend: str = "auto"  # auto | api | agent_sdk
     osticket_ticket_url: Optional[str] = None
     price_input_per_mtok: Optional[float] = None
     price_output_per_mtok: Optional[float] = None
@@ -90,6 +111,10 @@ class Settings:
     notif_email_url: Optional[str] = None
     notif_email_access_token: Optional[str] = None
     notif_gateway_basic_auth: Optional[str] = None
+    # mailapi transport: the bank's mail API (operation SEND_EMAIL)
+    mail_api_url: Optional[str] = None
+    mail_api_token: Optional[str] = None
+    mail_api_channel: str = "NMB_MOBILE"
     smtp_host: Optional[str] = None
     smtp_port: int = 25
     smtp_from: Optional[str] = None
@@ -172,10 +197,24 @@ class Settings:
             lookback_days=max(3, _int("FAILED_TXN_LOOKBACK_DAYS", 30) or 30),
             date_window_days=max(1, _int("FAILED_TXN_DATE_WINDOW_DAYS", 3) or 3),
             tran_table_pattern=_str("TRAN_TABLE_PATTERN", "NMBPRODIDC.TRAN{year}") or "NMBPRODIDC.TRAN{year}",
+            postilion_table=(_str("POSTILION_TABLE", "post_tran_leg") or "post_tran_leg").strip().lower(),
+            ecocash_reg_db_name=_str("ECOCASH_REG_DB_NAME", "Ecocash Reg") or "Ecocash Reg",
+            ecocash_reg_table=_str("ECOCASH_REG_TABLE", "public.ecocash_registration") or "public.ecocash_registration",
+            query_data=_bool("QUERY_DATA", True),
+            query_close=_bool("QUERY_CLOSE", False),
+            data_catalogue=_path("DATA_CATALOGUE", None) if _str("DATA_CATALOGUE") else None,
+            query_tables=_bool("QUERY_TABLES", True),
+            query_logs=_bool("QUERY_LOGS", True),
+            log_db=_path("LOG_DB", "state/logs.db"),
+            log_hash_key=_str("LOG_HASH_KEY", "") or "",
+            schema_dir=_path("SCHEMA_DIR", None) if _str("SCHEMA_DIR") else None,
             portal_host=_str("PORTAL_HOST", "127.0.0.1") or "127.0.0.1",
             portal_port=_int("PORTAL_PORT", 8085) or 8085,
             portal_users_file=_path("PORTAL_USERS_FILE", "state/portal_users.json"),
             portal_stale_minutes=_int("PORTAL_STALE_MINUTES", 40) or 40,
+            knowledge_max_chars=max(2000, _int("KNOWLEDGE_MAX_CHARS", 16000) or 16000),
+            claude_code_oauth_token=_str("CLAUDE_CODE_OAUTH_TOKEN"),
+            model_backend=(_str("MODEL_BACKEND", "auto") or "auto").lower(),
             osticket_ticket_url=_str("OSTICKET_TICKET_URL"),
             price_input_per_mtok=_float("PRICE_INPUT_PER_MTOK", 0.0) or None,
             price_output_per_mtok=_float("PRICE_OUTPUT_PER_MTOK", 0.0) or None,
@@ -191,6 +230,9 @@ class Settings:
             notif_email_url=_str("NOTIF_EMAIL_URL"),
             notif_email_access_token=_str("NOTIF_EMAIL_ACCESS_TOKEN"),
             notif_gateway_basic_auth=_str("NOTIF_GATEWAY_BASIC_AUTH"),
+            mail_api_url=_str("MAIL_API_URL"),
+            mail_api_token=_str("MAIL_API_TOKEN"),
+            mail_api_channel=_str("MAIL_API_CHANNEL", "NMB_MOBILE") or "NMB_MOBILE",
             smtp_host=_str("SMTP_HOST"),
             smtp_port=_int("SMTP_PORT", 25) or 25,
             smtp_from=_str("SMTP_FROM"),
@@ -232,6 +274,8 @@ class Settings:
             errors.append(f"AGENT_MODE must be one of {VALID_MODES}, got {mode!r}")
         if self.approval_mode not in ("off", "unscripted", "all"):
             errors.append(f"APPROVAL_MODE must be off, unscripted or all, got {self.approval_mode!r}")
+        if self.postilion_table not in ("post_tran_leg", "post_tran"):
+            errors.append(f"POSTILION_TABLE must be post_tran_leg or post_tran, got {self.postilion_table!r}")
         if self.pending_changes_sql and not re.search(r"\{(account|internal|client)\}", self.pending_changes_sql):
             errors.append("PENDING_CHANGES_SQL must use {account}, {internal} or {client} to select the customer")
         if self.pending_changes_sql and not self.pending_changes_sql.lstrip().upper().startswith(("SELECT", "WITH")):
@@ -242,8 +286,7 @@ class Settings:
             errors.append(f"MODEL_FALLBACK must be rules or none, got {self.model_fallback!r}")
         if mode in ("notes", "live") and not self.reply_staff_id:
             errors.append(f"REPLY_STAFF_ID is required for AGENT_MODE={mode} (the staff account the agent posts as)")
-        if need_model and not self.anthropic_api_key:
-            errors.append("ANTHROPIC_API_KEY is not set")
+        errors += backend_problems(self, need_model)  # an API key, or a subscription token for the Agent SDK
         if not self.metabase_host:
             errors.append("METABASE_HOST is not set")
         if not self.metabase_api_key:
@@ -254,8 +297,10 @@ class Settings:
             errors.append("FAILED_TXN_HELP_TOPICS is empty")
         if not TRAN_PATTERN_RE.fullmatch(self.tran_table_pattern):
             errors.append("TRAN_TABLE_PATTERN must be schema.table with {year}, e.g. NMBPRODIDC.TRAN{year}")
-        if self.notify_transport not in ("off", "gateway", "smtp"):
-            errors.append(f"NOTIFY_TRANSPORT must be off, gateway or smtp, got {self.notify_transport!r}")
+        if self.notify_transport not in ("off", "gateway", "smtp", "mailapi"):
+            errors.append(f"NOTIFY_TRANSPORT must be off, gateway, smtp or mailapi, got {self.notify_transport!r}")
+        if self.notify_transport == "mailapi" and not (self.mail_api_url and self.mail_api_token):
+            errors.append("NOTIFY_TRANSPORT=mailapi needs MAIL_API_URL and MAIL_API_TOKEN")
         if self.notify_transport == "gateway" and not self.notif_email_url:
             errors.append("NOTIFY_TRANSPORT=gateway needs NOTIF_EMAIL_URL")
         if self.notify_transport == "smtp" and not (self.smtp_host and self.smtp_from):

@@ -13,6 +13,7 @@ from typing import Optional, Union
 from dotenv import load_dotenv
 
 from agentcore.config import Env
+from agentcore.sdk_backend import backend_problems
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DESK = "nmb_connect"
@@ -74,10 +75,16 @@ class Settings:
     activity_days: int
     sms_days: int
     # Portal
+    # query_data: read-only look into the approved tables of the bank's other databases (agentcore.dataquery)
+    query_data: bool = True
+    data_catalogue: Optional[Path] = None  # None: agentcore/data_catalogue.json
     portal_host: str = "127.0.0.1"
     portal_port: int = 8085
     portal_users_file: Path = BASE_DIR / "state/portal_users.json"
     portal_stale_minutes: int = 40
+    knowledge_max_chars: int = 16000  # prompt space for switched-on staff notes (agentcore.knowledge)
+    claude_code_oauth_token: Optional[str] = None  # a Claude subscription through the Agent SDK (agentcore.sdk_backend)
+    model_backend: str = "auto"  # auto | api | agent_sdk
     osticket_ticket_url: Optional[str] = None
     price_input_per_mtok: Optional[float] = None
     price_output_per_mtok: Optional[float] = None
@@ -93,6 +100,10 @@ class Settings:
     notif_email_url: Optional[str] = None
     notif_email_access_token: Optional[str] = None
     notif_gateway_basic_auth: Optional[str] = None
+    # mailapi transport: the bank's mail API (operation SEND_EMAIL)
+    mail_api_url: Optional[str] = None
+    mail_api_token: Optional[str] = None
+    mail_api_channel: str = "NMB_MOBILE"
     smtp_host: Optional[str] = None
     smtp_port: int = 25
     smtp_from: Optional[str] = None
@@ -177,10 +188,15 @@ class Settings:
             exclude_topics=_list("NMB_CONNECT_EXCLUDE_TOPICS", DEFAULT_EXCLUDE),
             activity_days=max(1, min(_int("NMB_CONNECT_ACTIVITY_DAYS", 14) or 14, 60)),
             sms_days=max(1, min(_int("NMB_CONNECT_SMS_DAYS", 7) or 7, 30)),
+            query_data=_bool("QUERY_DATA", True),
+            data_catalogue=_path("DATA_CATALOGUE", None) if _str("DATA_CATALOGUE") else None,
             portal_host=_str("PORTAL_HOST", "127.0.0.1") or "127.0.0.1",
             portal_port=_int("PORTAL_PORT", 8085) or 8085,
             portal_users_file=_path("PORTAL_USERS_FILE", "state/portal_users.json"),
             portal_stale_minutes=_int("PORTAL_STALE_MINUTES", 40) or 40,
+            knowledge_max_chars=max(2000, _int("KNOWLEDGE_MAX_CHARS", 16000) or 16000),
+            claude_code_oauth_token=_str("CLAUDE_CODE_OAUTH_TOKEN"),
+            model_backend=(_str("MODEL_BACKEND", "auto") or "auto").lower(),
             osticket_ticket_url=_str("OSTICKET_TICKET_URL"),
             price_input_per_mtok=_float("PRICE_INPUT_PER_MTOK", 0.0) or None,
             price_output_per_mtok=_float("PRICE_OUTPUT_PER_MTOK", 0.0) or None,
@@ -196,6 +212,9 @@ class Settings:
             notif_email_url=_str("NOTIF_EMAIL_URL"),
             notif_email_access_token=_str("NOTIF_EMAIL_ACCESS_TOKEN"),
             notif_gateway_basic_auth=_str("NOTIF_GATEWAY_BASIC_AUTH"),
+            mail_api_url=_str("MAIL_API_URL"),
+            mail_api_token=_str("MAIL_API_TOKEN"),
+            mail_api_channel=_str("MAIL_API_CHANNEL", "NMB_MOBILE") or "NMB_MOBILE",
             smtp_host=_str("SMTP_HOST"),
             smtp_port=_int("SMTP_PORT", 25) or 25,
             smtp_from=_str("SMTP_FROM"),
@@ -247,8 +266,7 @@ class Settings:
             errors.append(f"MODEL_FALLBACK must be rules or none, got {self.model_fallback!r}")
         if mode in ("notes", "live") and not self.reply_staff_id:
             errors.append(f"REPLY_STAFF_ID is required for AGENT_MODE={mode} (the staff account the agent posts as)")
-        if need_model and not self.anthropic_api_key:
-            errors.append("ANTHROPIC_API_KEY is not set")
+        errors += backend_problems(self, need_model)  # an API key, or a subscription token for the Agent SDK
         if not self.metabase_host:
             errors.append("METABASE_HOST is not set")
         if not self.metabase_api_key:
@@ -262,8 +280,10 @@ class Settings:
                             ("NMB_CONNECT_HISTORY_TABLE", self.reg_history_table)):
             if value and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?", value):
                 errors.append(f"{name} must be a table name, got {value!r}")
-        if self.notify_transport not in ("off", "gateway", "smtp"):
-            errors.append(f"NOTIFY_TRANSPORT must be off, gateway or smtp, got {self.notify_transport!r}")
+        if self.notify_transport not in ("off", "gateway", "smtp", "mailapi"):
+            errors.append(f"NOTIFY_TRANSPORT must be off, gateway, smtp or mailapi, got {self.notify_transport!r}")
+        if self.notify_transport == "mailapi" and not (self.mail_api_url and self.mail_api_token):
+            errors.append("NOTIFY_TRANSPORT=mailapi needs MAIL_API_URL and MAIL_API_TOKEN")
         if self.notify_transport == "gateway" and not self.notif_email_url:
             errors.append("NOTIFY_TRANSPORT=gateway needs NOTIF_EMAIL_URL")
         if self.notify_transport == "smtp" and not (self.smtp_host and self.smtp_from):

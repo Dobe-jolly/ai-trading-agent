@@ -186,7 +186,8 @@ class FakeMetabase:
             thread, staff, kind, poster, body = m.groups()
             self.next_entry_id += 1
             self.entries[int(thread)].append({"id": self.next_entry_id, "type": kind, "staff_id": int(staff),
-                                              "poster": _unsql(poster), "body": _unsql(body), "created": "2026-10-07 12:00:00"})
+                                              "poster": _unsql(poster), "body": _unsql(body),
+                                              "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
         elif sql.startswith("UPDATE ost_ticket"):
             tid = int(re.search(r"WHERE ticket_id = (\d+)", sql).group(1))
             ticket = self.tickets[tid]

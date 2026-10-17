@@ -241,3 +241,29 @@ def test_live_state_and_reply_rules(mb):
                              TicketState(1, "open", "Open", "General / Other", ticket.last_entry_id), Evidence(),
                              Pseudonymizer(), confidence_threshold=0.85, closes_so_far=0, max_closes=20, topics=["EcoCash"])
     assert moved.final.action == NO_ACTION and moved.deferred
+
+
+def test_without_the_monitor_table_lookups_read_the_java_failures_only():
+    """Before the Python monitor runs, its table is not in the database: lookups use failed_ecocash_registrations."""
+    from agentcore.metabase import MetabaseError
+    from ecocash.ecocash import AttemptStore
+
+    class OnlyJava:
+        def __init__(self):
+            self.sql = []
+
+        def query(self, db, sql):
+            self.sql.append(sql)
+            if "ecocash_link_attempts" in sql:
+                raise MetabaseError('ERROR: relation "ecocash_link_attempts" does not exist')
+            return [{"id": 7, "mobile_number": "263771234567", "error_message": "Customer already registered",
+                     "id_number": None, "currency": "USD", "first_name": "A", "last_name": "B",
+                     "account_number": "1000000001", "failure_timestamp": "2026-10-10 09:00:00"}]
+
+    mb = OnlyJava()
+    store = AttemptStore(mb, 125)
+    found = store.find(mobile="0771234567", days=30)
+    assert [a.source for a in found.attempts] == ["java_failures"] and found.attempts[0].outcome == "failed"
+    assert not store.attempts_available() and store.attempts_start() is None
+    assert store.counts(found.attempts[0].when, found.attempts[0].when, True) == []
+    assert sum("ecocash_link_attempts" in q for q in mb.sql) == 1  # asked once, then remembered

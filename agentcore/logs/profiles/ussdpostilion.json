@@ -1,0 +1,6 @@
+{
+  "service": "ussdpostilion",
+  "format": "journald",
+  "about": "ZIPIT bridge between USSD and Postilion: ZIPIT validation and send over an ISO 8583 socket, with the message fields dumped to the log",
+  "correlation": {}
+}

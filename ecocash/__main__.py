@@ -68,15 +68,15 @@ def load_prompt(s: Settings) -> str:
 
 
 def build_runner(s: Settings, mode: str, mb: MetabaseClient, audit: AuditLog):
-    import anthropic
-
     from .loop import TicketAgent
     from .runner import Runner
     from agentcore.writer import OsTicketWriter, ShadowWriter
 
     store = build_store(s, mb)
     toolbox = build_toolbox(s, mb)
-    client = anthropic.Anthropic(api_key=s.anthropic_api_key, max_retries=3)
+    from agentcore.sdk_backend import build_client
+
+    client = build_client(s, 3)
     agent = TicketAgent(
         client, model=s.model, system_prompt=load_prompt(s), toolbox=toolbox,
         max_turns=s.max_agent_turns, agent_staff_id=s.reply_staff_id,
@@ -162,9 +162,14 @@ class EcoCashCli(DeskCli):
                 print(f"[osticket] replies will be posted as: {store.staff_poster_name(s.reply_staff_id)}")
         if found["ecocash"] is not None:
             toolbox = build_toolbox(s, mb)
-            first = toolbox.attempts.attempts_start()
-            print(f"[ecocash] {s.attempts_table}: " + (f"recording since {first:%d-%m-%Y %H:%M}" if first
-                                                       else "empty (start the monitor)"))
+            if toolbox.attempts.attempts_available():
+                first = toolbox.attempts.attempts_start()
+                print(f"[ecocash] {s.attempts_table}: " + (f"recording since {first:%d-%m-%Y %H:%M}" if first
+                                                           else "empty (start the monitor)"))
+            else:
+                print(f"[ecocash] {s.attempts_table} is not in {s.ecocash_db_name!r} yet: lookups read the Java "
+                      "monitor's failed_ecocash_registrations only (failures, not successful links). Start the "
+                      "Python monitor to record every attempt.")
             if toolbox.link_records is not None:
                 mb.query(toolbox.link_records.db, f"SELECT TOP 1 date_added FROM {s.postilion_table}")
                 print(f"[postilion] {s.postilion_table} readable")

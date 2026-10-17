@@ -1,0 +1,6 @@
+{
+  "service": "registration",
+  "format": "journald",
+  "about": "NMB Connect registration and login service for USSD: registration status, card type, username/PIN login strategy, customer profile",
+  "correlation": {}
+}

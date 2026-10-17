@@ -1,0 +1,8 @@
+{
+  "service": "visactivation",
+  "format": "journald",
+  "about": "Visa card activation: account validation through the Intellect Olive publisher, batch validation, Redis cache",
+  "correlation": {
+    "requestId": "\"RequestId\":\"([^\"]{4,64})\""
+  }
+}

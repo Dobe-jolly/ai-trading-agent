@@ -12,9 +12,12 @@ Transports:
   (POST NOTIF_EMAIL_URL {to, subject, body, uuid, access_token}, Basic auth header).
 - smtp: a plain SMTP relay. Supports Reply-To, so a branch can answer by replying to the email
   when osTicket fetches that mailbox (the [#number] subject threads it into the ticket).
+- mailapi: the bank's mail API (POST MAIL_API_URL, operation SEND_EMAIL, channel NMB_MOBILE): one request per
+  e-mail with every recipient in "to". The access token is read from the env file (MAIL_API_TOKEN).
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import smtplib
@@ -113,6 +116,52 @@ class GatewayEmail:
         self._http.close()
 
 
+class MailApiEmail:
+    """The bank's mail API: {operation: SEND_EMAIL, channel, accessToken, uuid, requestBody: {to, subject, message}}.
+    The API has no cc, so the cc addresses join "to". uuid is the notification's own id, so a retry can be spotted."""
+
+    channel = "mailapi"
+    FAILURE_WORDS = ("fail", "error", "denied", "invalid", "unauthori", "reject")
+
+    def __init__(self, url: str, access_token: Optional[str], channel_name: str = "NMB_MOBILE", timeout: float = 15.0,
+                 transport: Optional[httpx.BaseTransport] = None) -> None:
+        self._url, self._token, self._channel = url, access_token or "", channel_name or "NMB_MOBILE"
+        self._http = httpx.Client(timeout=timeout, headers={"Content-Type": "application/json"}, transport=transport)
+
+    def _safe(self, text: str) -> str:
+        return text.replace(self._token, "***") if self._token else text  # never put the token in a log or the outbox
+
+    def send(self, *, to: str, cc: list[str], subject: str, body: str, message_id: str) -> None:
+        payload = {"operation": "SEND_EMAIL", "channel": self._channel, "accessToken": self._token, "uuid": message_id,
+                   "requestBody": {"to": ", ".join([to, *cc]), "subject": subject, "message": body}}
+        try:
+            response = self._http.post(self._url, json=payload)
+        except httpx.HTTPError as exc:
+            raise NotifyError(f"mail API unreachable: {type(exc).__name__}") from exc
+        if response.status_code >= 400:
+            raise NotifyError(self._safe(f"mail API returned HTTP {response.status_code}: {response.text[:200]}"))
+        try:
+            answer = response.json()
+        except ValueError:
+            return  # a 2xx without JSON: accepted
+        if isinstance(answer, dict) and self._failed(answer):
+            raise NotifyError(self._safe(f"mail API refused the e-mail: {json.dumps(answer)[:200]}"))
+
+    @classmethod
+    def _failed(cls, answer: dict[str, Any]) -> bool:
+        """Only an explicit failure in the answer counts (its success format isn't documented)."""
+        if answer.get("success") is False or answer.get("successful") is False:
+            return True
+        for key in ("status", "responseStatus", "result"):
+            value = answer.get(key)
+            if isinstance(value, str) and any(w in value.lower() for w in cls.FAILURE_WORDS):
+                return True
+        return False
+
+    def close(self) -> None:
+        self._http.close()
+
+
 class GatewaySms:
     """SMS through the bank gateway, exactly as the Java AdminNotifGateway.sendSms."""
 
@@ -184,6 +233,8 @@ def build_transport(settings: Any) -> Optional[Any]:
     kind = settings.notify_transport
     if kind == "gateway":
         return GatewayEmail(settings.notif_email_url, settings.notif_email_access_token, settings.notif_gateway_basic_auth)
+    if kind == "mailapi":
+        return MailApiEmail(settings.mail_api_url, settings.mail_api_token, settings.mail_api_channel)
     if kind == "smtp":
         return SmtpEmail(settings.smtp_host, settings.smtp_port, settings.smtp_from, settings.smtp_from_name,
                          settings.notify_reply_to, settings.smtp_starttls, settings.smtp_username, settings.smtp_password)

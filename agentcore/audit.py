@@ -124,7 +124,7 @@ EXPORT_COLUMNS = [
     "guardrail_notes", "tools_used", "executed", "deferred", "error", "input_tokens", "output_tokens",
 ]
 JSON_COLUMNS = ("evidence", "account_statuses", "guardrail_notes", "tools_used", "executed", "transcript", "facts",
-                "attachments")
+                "attachments", "knowledge_active", "knowledge_used")
 
 
 def now_iso() -> str:
@@ -145,7 +145,11 @@ class AuditLog:
         self._db.executescript(APPROVAL_SCHEMA)
         # Columns added after a log may already exist.
         have = {r[1] for r in self._db.execute("PRAGMA table_info(decisions)").fetchall()}
-        for column in ("facts", "branch", "attachments", "approval"):
+        # prompt_version: hash of the system prompt (with staff notes) and tools that produced the decision;
+        # knowledge_active / knowledge_used: the notes that were on, and the ones it used (agentcore.knowledge);
+        # reopened_at / outcome_checked_at: whether a ticket the agent closed was reopened (the quality signal).
+        for column in ("facts", "branch", "attachments", "approval", "prompt_version", "knowledge_active",
+                       "knowledge_used", "reopened_at", "outcome_checked_at"):
             if column not in have:
                 self._db.execute(f"ALTER TABLE decisions ADD COLUMN {column} TEXT")
         self._db.commit()

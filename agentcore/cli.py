@@ -16,11 +16,13 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from . import logsafe
 from .audit import AuditLog
 from .controls import effective_mode, read_mode_override
 from .decision import ESCALATE, REPLY_AND_CLOSE
 from .metabase import MetabaseClient, MetabaseError
 from .pii import Pseudonymizer
+from .sdk_backend import build_client, has_model, wants_sdk
 
 log = logging.getLogger("agent")
 VALID_MODES = ("shadow", "notes", "live")
@@ -143,15 +145,14 @@ class DeskCli:
                 ok = False
             finally:
                 mb.close()
-        if args.ping_model and s.anthropic_api_key:
-            import anthropic
-
+        if args.ping_model and has_model(s):
+            how = "Agent SDK, Claude subscription token" if wants_sdk(s) else "Claude API key"
             try:
-                reply = anthropic.Anthropic(api_key=s.anthropic_api_key, max_retries=1).messages.create(
+                reply = build_client(s, 1).messages.create(
                     model=s.model, max_tokens=5, messages=[{"role": "user", "content": "Reply with OK"}])
-                print(f"[model] OK: {s.model} answered ({reply.usage.output_tokens} tokens)")
-            except anthropic.APIError as exc:
-                print(f"[model] {type(exc).__name__}: {exc}")
+                print(f"[model] OK: {s.model} answered through the {how} ({reply.usage.output_tokens} tokens)")
+            except Exception as exc:  # noqa: BLE001 - API or SDK error, shown as is
+                print(f"[model] {type(exc).__name__} ({how}): {str(exc)[:300]}")
                 ok = False
         print("All good." if ok else "Fix the items above.")
         return 0 if ok else 1
@@ -209,6 +210,46 @@ class DeskCli:
             mb.close()
         return 0
 
+    def cmd_knowledge_seed(self, s: Any, args: argparse.Namespace) -> int:
+        """Propose the desk's built-in staff notes (<desk>/knowledge_seed.json) that are not in the console yet. They
+        wait as proposed notes until an Admin switches them on (Teach the agent); a title already there, in any state,
+        is left alone, so a note an Admin turned down or switched off is not proposed again."""
+        import json
+
+        from .knowledge import Draft, KnowledgeError, KnowledgeStore
+
+        path = Path(args.file) if args.file else self.base_dir / self.desk / "knowledge_seed.json"
+        if not path.exists():
+            print(f"No built-in notes for this desk ({path} not found)")
+            return 0
+        notes = json.loads(path.read_text(encoding="utf-8")).get("notes") or []
+        audit = AuditLog(s.state_db)
+        try:
+            store = KnowledgeStore(audit.db)
+            have = {str(r["title"]).strip().lower(): r["status"] for r in store.db.execute("SELECT title, status FROM knowledge")}
+            proposed = 0
+            for note in notes:
+                draft = Draft.from_body(note)
+                if draft.title.strip().lower() in have:
+                    print(f"  already there ({have[draft.title.strip().lower()]}): {draft.title}")
+                    continue
+                if args.dry_run:
+                    print(f"  would propose: {draft.title}")
+                    continue
+                try:
+                    row = store.propose(draft, by=args.by, source_ticket=None)
+                except KnowledgeError as exc:
+                    print(f"  NOT proposed: {draft.title}: {exc}")
+                    continue
+                proposed += 1
+                print(f"  proposed K{row['id']}: {draft.title}")
+        finally:
+            audit.close()
+        if proposed:
+            print(f"{proposed} note(s) proposed. An Admin switches them on in the console (Teach the agent); until "
+                  "then the desk does not use them.")
+        return 0
+
     def cmd_report(self, s: Any, args: argparse.Namespace) -> int:
         audit = AuditLog(s.state_db)
         count = audit.export_csv(Path(args.out), args.since, args.mode)
@@ -262,12 +303,10 @@ class DeskCli:
             mode = "local"
         client = None
         if mode == "model":
-            if not s.anthropic_api_key:
-                print("ANTHROPIC_API_KEY is not set (or use --local)")
+            if not has_model(s):
+                print("Neither ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN is set (or use --local)")
                 return 1
-            import anthropic
-
-            client = anthropic.Anthropic(api_key=s.anthropic_api_key, max_retries=2)
+            client = build_client(s, 2)
         mb = self.build_metabase(s)
         try:
             store = self.build_store(s, mb)
@@ -342,10 +381,8 @@ class DeskCli:
         notifier = notify.Notifier(audit, s, notify.build_transport(s), notify.build_sms_transport(s))
         try:
             client = None
-            if s.anthropic_api_key and not args.no_model:
-                import anthropic
-
-                client = anthropic.Anthropic(api_key=s.anthropic_api_key, max_retries=2)
+            if has_model(s) and not args.no_model:
+                client = build_client(s, 2)
             service = self.build_anomaly_service(s, mb, audit, client, notifier)
             report = service.run(alert=args.alert, use_model=not args.no_model)
         except MetabaseError as exc:
@@ -455,6 +492,11 @@ class DeskCli:
         p.add_argument("--window-today", action="store_true", help="lookups end today, not at the close date")
         p.add_argument("--out-dir", default=str(self.base_dir / "reports"))
 
+        p = sub.add_parser("knowledge-seed", help="propose the desk's built-in staff notes for an Admin to switch on")
+        p.add_argument("--by", default="built-in (from the code)", help="who the notes are proposed by")
+        p.add_argument("--file", help="a notes file (default: <desk>/knowledge_seed.json)")
+        p.add_argument("--dry-run", action="store_true", help="list what would be proposed")
+
         p = sub.add_parser("compare", help="shadow decisions vs what actually happened")
         p.add_argument("--since", default=week_ago)
         p.add_argument("--out", default="compare.csv")
@@ -467,7 +509,7 @@ class DeskCli:
         commands = {"check": self.cmd_check, "run": self.cmd_run, "audit": self.cmd_audit, "report": self.cmd_report,
                     "compare": self.cmd_compare, "portal": self.cmd_portal, "portal-user": self.cmd_portal_user,
                     "notify-test": self.cmd_notify_test, "notify-retry": self.cmd_notify_retry,
-                    "attachments": self.cmd_attachments}
+                    "attachments": self.cmd_attachments, "knowledge-seed": self.cmd_knowledge_seed}
         if self.anomaly_noun:
             commands["anomalies"] = self.cmd_anomalies
         commands.update(self.add_commands(sub))
@@ -476,10 +518,7 @@ class DeskCli:
     def main(self, argv: Optional[list[str]] = None) -> int:
         parser, commands = self.parser()
         args = parser.parse_args(argv)
-        logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
-                            format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-        for noisy in ("httpx", "httpx2", "httpcore", "anthropic"):
-            logging.getLogger(noisy).setLevel(logging.WARNING)
+        logsafe.setup(args.verbose, ("httpx", "httpx2", "httpcore", "anthropic"))
         settings = self.settings_cls.from_env(args.env_file)
         return commands[args.command](settings, args)
 

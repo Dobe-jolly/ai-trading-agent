@@ -37,12 +37,12 @@ reaches a database, and never writes to osTicket.
 agent host (RHEL)                                   integrations host
   nmbz-agents.timer ─► python -m nmbz run              ecocashreg.service ─journal─► python -m nmbz monitor
      every desk, in order                                                               └─► ecocash_link_attempts
-  nmbz-console ─► one console, port 8085 (behind F5/nginx, TLS)
+  nmbz-console ─► one console, port 8085 (behind F5/nginx, TLS): the supervision portal at /, the classic page at /classic
         │                        │                    │
         ▼                        ▼                    ▼
   Metabase API ──► osTicket, core banking (standby), Postilion, CONECT and its registrations, billers, IB, SMS gateway, EcoCash monitor
   api.anthropic.com (443, via the bank's proxy if there is one)
-  notification gateway or SMTP ──► branch e-mails, admin SMS
+  notification gateway, mail API or SMTP ──► branch e-mails, admin SMS
 ```
 
 ## Roadmap status
@@ -53,7 +53,7 @@ agent host (RHEL)                                   integrations host
 | B. Extraction and classification | Done inside each desk: Claude reads the ticket. The SMS desk also triages tickets filed under other topics. |
 | C. Retrieval and drafting | Drafting done. Retrieval over resolved tickets ("the last 12 like this were fixed by ...") is not built yet. |
 | D. Evidence-gated auto-close | Built for SMS Alerts, EcoCash linking, failed transactions and NMB Connect registration and login, each starting in shadow, then notes, then live. The router files tickets from catch-all topics under the topic a desk works. |
-| E. Continuous adaptation | Partly: the anomaly watch, the audit replay of closed tickets, and review marks in the console. Mining new patterns into proposed rules is not built. |
+| E. Continuous adaptation | Partly: the anomaly watch, the audit replay of closed tickets, review marks in the console, and staff teaching desks from a ticket's review step (notes and read-only lookups, tried on the ticket, switched on by a second Admin, traced on every decision: `agentcore/knowledge.py`, `agentcore/trial.py`). Close precision and the reopen rate are on the Review page. Mining new patterns into proposed notes automatically is not built. |
 
 ## Next desks
 

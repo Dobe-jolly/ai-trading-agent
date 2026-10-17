@@ -1,0 +1,41 @@
+{
+  "about": "What the helpdesk taught the failed-transactions desk while it was being built, moved out of the code so staff can read, change or switch off each one in the console (Teach the agent). `python -m nmbz knowledge-seed --desk failed_txn` proposes the ones not there yet; an Admin switches them on.",
+  "notes": [
+    {
+      "title": "Response 57 (not permitted): check the account's permissions",
+      "body": "Response 57 from core banking means the account is not allowed this kind of transaction. When core banking's own error (core_banking_error) does not say why, look at the account's permissions: whether ATM / card use is enabled, and whether the account is dormant, inoperative, frozen or closed (confirm_transaction shows these as account_restrictions). If one of them is the cause, tell the branch which one and what to do about it (for example: enable ATM use on the account, or reactivate the dormant account), and that the client can then try again. If none of them is, or they could not be read, the cause is elsewhere: escalate and say what you checked."
+    },
+    {
+      "title": "Response 61 or 65 (over a limit): which limit stopped it",
+      "body": "For a 61 or 65, the actual error is in core banking's (IDC) interface log: ASIERRLOG joined to ASIINNP by the RRN (ASIIN_FIELD_037) and the date. confirm_transaction reads it as core_banking_error; when there is one, that is the reason to give the branch (for example 'Transaction Limit for Cash Withdrawals exceeded for the month Limit of 300'). When there is no core banking error, the limit is Postilion's, not the account's: the transaction's Response Data (RemainingAdvancedLimits) lists the card's limits (postilion_limits) and postilion_limit_hit is the one that stopped it; tell the branch that limit, what was left and when it resets. If none of Postilion's limits clearly stopped it, the limit is probably the switch's or the partner's (for example EcoCash): escalate so a person can take it to the vendor."
+    },
+    {
+      "title": "Core banking's limit of zero",
+      "body": "When core banking's error says the limit is 0 (for example '... Limit of 0'), the account has a special limit of zero on these transactions: a smaller amount will not help. The helpdesk replies: 'Kindly note that the account has a special limit of zero on these transactions, so they will be declined until the limit is changed.' (#631696)"
+    },
+    {
+      "title": "Sender's card not found",
+      "body": "When the switch's reason is 'Sender's card not found' (usually a ZIPIT declined with response 30), the client's account is not linked to their card. The helpdesk replies: 'The client's account is not linked to their card: kindly link the client's account to their card at the branch, then try again.'"
+    },
+    {
+      "title": "The ticket's amount is not there, but another amount was declined",
+      "body": "Branches often give a balance or a credit instead of the attempt's amount. When there is no attempt of the ticket's amount but an attempt of another amount was declined, say so openly rather than guessing: 'We could not find an attempt of <ticket amount> on the client's account. We can see the <channel> of <amount> on <date>, which was declined (<reason>), and no money left the client's account.' Name both amounts. If other attempts were declined with the same code, say how many."
+    },
+    {
+      "title": "EcoCash link: what to tell the branch",
+      "body": "On EcoCash bank-to-wallet / wallet-to-bank tickets the link between the EcoCash wallet and the account is often the problem. In the registration log REGISTRATION is today's way of linking, BANKREG the earlier one, and DEREGISTRATION removes the link; the latest event per mobile and currency is the link in force. The helpdesk's replies: no link for the account: 'Kindly advise the client to link the account for B2W or W2B services.' Linked to another account: 'Kindly note that the linked account is <account>. Kindly delink that account and advise the client to register with the new account.' Linked to a closed account: 'Kindly advise the client to link the correct account: the linked account is closed.' The account on the ticket does not exist in core banking: 'Kindly advise the client to confirm the account number. It is failing to validate.' When the link is fine (linked to the client's account), the link is not the problem: look for the transaction."
+    },
+    {
+      "title": "EcoCash wallets linked to different accounts: say what you see",
+      "body": "When a client's wallets differ (for example USD linked to the client's account and ZWG to another account, or to a dormant or closed one), do not pick which one is wrong. Tell the branch what you see: each wallet (mobile and currency), the account it is linked to, since when, and anything wrong with that account (dormant, closed, ATM use not enabled). Then: 'Kindly delink the wrong link and advise the client to register with the correct account.' The branch decides which link is wrong. (#426194, #752791)"
+    },
+    {
+      "title": "EcoCash registration failing while the wallet is already linked",
+      "body": "When the client cannot register for EcoCash but the wallet is already linked to the client's account, the helpdesk's answer is: 'Kindly de-register the profile on Universal dashboard and advise the client to try again.' That is done on the Universal dashboard, so escalate with that draft for a person."
+    },
+    {
+      "title": "'No universal account' on a ZIPIT is the destination account",
+      "body": "On a ZIPIT to another bank, 'no universal account' means the destination account fails validation; it is not an EcoCash link problem, so do not use the EcoCash link lookups on a ZIPIT ticket. The helpdesk replies: 'Kindly advise the client to confirm the destination account. It is failing to validate the destination account.' (#971899)"
+    }
+  ]
+}

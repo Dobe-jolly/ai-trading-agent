@@ -205,6 +205,8 @@ def test_lookup_and_check_commands(settings, mb, monkeypatch, capsys, tmp_path):
     mb.add_ticket(1, "100001", ["Client 0771234567 cannot link"])
     monkeypatch.setattr(cli.CLI, "build_metabase", lambda s: mb)
     monkeypatch.setenv("METABASE_API_KEY", "k")
+    monkeypatch.setenv("ECOCASH_DB_NAME", "ecocash_monitor")
+    monkeypatch.setenv("POSTILION_DB_NAME", "POSTILION")
     env = ["--env-file", str(tmp_path / "none.env")]
     assert cli.main(env + ["lookup", "--mobile", "0771234567"]) == 0
     out = json.loads(capsys.readouterr().out)

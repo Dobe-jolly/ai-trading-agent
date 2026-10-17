@@ -306,8 +306,25 @@ def decision_detail(conn: sqlite3.Connection, decision_id: int) -> Optional[dict
             (row["ticket_id"], decision_id)).fetchall()],
         "approval_note": row["approval"] if "approval" in row.keys() else None,
         "approval": _approval_for(conn, decision_id),
+        # Which prompt and staff notes produced it (agentcore.knowledge): traceable, and a bad note can be switched off.
+        "prompt_version": row["prompt_version"] if "prompt_version" in row.keys() else None,
+        "knowledge_active": _json(row["knowledge_active"], []) if "knowledge_active" in row.keys() else [],
+        "knowledge_used": _notes(conn, _json(row["knowledge_used"], []) if "knowledge_used" in row.keys() else []),
+        "reopened_at": row["reopened_at"] if "reopened_at" in row.keys() else None,
     })
     return detail
+
+
+def _notes(conn: sqlite3.Connection, ids: list[Any]) -> list[dict[str, Any]]:
+    """id, title and status of the staff notes a decision used."""
+    out = []
+    for i in ids:
+        try:
+            row = conn.execute("SELECT id, title, status FROM knowledge WHERE id = ?", (int(i),)).fetchone()
+        except (sqlite3.Error, TypeError, ValueError):
+            row = None
+        out.append(dict(row) if row else {"id": i, "title": None, "status": None})
+    return out
 
 
 # ---- approvals and the live view ---------------------------------------------------------
@@ -431,8 +448,21 @@ def quality(conn: sqlite3.Connection, days: int) -> dict[str, Any]:
         "template_same_as_actual": sum(1 for r in audit_rows if _same(r["template_reply"], r["actual_reply"])),
         "agent_same_as_actual": sum(1 for r in audit_rows if _same(r["reply_text"], r["actual_reply"])),
     }
+    # The two numbers that matter most for an agent that closes tickets: of the closes people reviewed, how many
+    # were right; and of the tickets it really closed, how many were reopened since (checked on every pass).
+    closes = by_action.get("reply_and_close", Counter())
+    closed = conn.execute(
+        "SELECT COUNT(*) AS closed, SUM(outcome_checked_at IS NOT NULL) AS checked, "
+        "SUM(reopened_at IS NOT NULL) AS reopened FROM decisions "
+        "WHERE final_action = 'reply_and_close' AND executed LIKE '%\"close\"%' AND created_at >= ?",
+        (since,)).fetchone()
+    checked, reopened = int(closed["checked"] or 0), int(closed["reopened"] or 0)
     return {
         "days": days,
+        "close_precision": {"reviewed": sum(closes.values()), "correct": closes["correct"],
+                            "precision": round(closes["correct"] / sum(closes.values()), 3) if closes else None},
+        "reopens": {"closed": int(closed["closed"] or 0), "checked": checked, "reopened": reopened,
+                    "rate": round(reopened / checked, 3) if checked else None},
         "reviewed": len(reviewed),
         "correct": correct,
         "incorrect": len(reviewed) - correct,

@@ -12,6 +12,7 @@ from http.server import ThreadingHTTPServer
 import pytest
 
 from agentcore.audit import AuditLog
+from agentcore.portal import data
 from agentcore.portal.server import HttpError, make_handler
 from agentcore.portal.users import UserStore
 from ecocash.config import Settings as EcoSettings
@@ -21,7 +22,18 @@ from sms_alerts.config import Settings as SmsSettings
 
 
 @pytest.fixture
-def console(tmp_path):
+def web(tmp_path):
+    """A stand-in for the portal's build (agentcore/portal/web)."""
+    root = tmp_path / "web"
+    (root / "assets").mkdir(parents=True)
+    (root / "index.html").write_text('<!doctype html><div id="root"></div><script src="/assets/index-abc.js"></script>')
+    (root / "assets" / "index-abc.js").write_text("console.log('portal')")
+    (root / "assets" / "plex-400.woff2").write_bytes(b"wOF2")
+    return root
+
+
+@pytest.fixture
+def console(tmp_path, web):
     users = UserStore(tmp_path / "users.json")
     users.set("dobe", "correct horse battery", "admin")
     users.set("viewer1", "another long password", "viewer")
@@ -34,7 +46,8 @@ def console(tmp_path):
     txn = replace(TxnSettings.from_env(env_file=tmp_path / "none.env"), state_db=tmp_path / "txn" / "agent.sqlite",
                   kill_switch_file=tmp_path / "txn" / "STOP", mode_override_file=tmp_path / "txn" / "HOLD",
                   portal_users_file=tmp_path / "users.json")
-    return Console({"sms_alerts": sms, "ecocash": eco, "failed_txn": txn}, users, stop_file=tmp_path / "STOP")
+    return Console({"sms_alerts": sms, "ecocash": eco, "failed_txn": txn}, users, stop_file=tmp_path / "STOP",
+                   web_dir=web)
 
 
 def test_service_lists_each_desk_with_its_wording(console):
@@ -47,6 +60,36 @@ def test_service_lists_each_desk_with_its_wording(console):
     assert txn["vocab"]["anomaly"]["unavailable"] and "reversal_failed" in txn["vocab"]["status"]
     assert "outcomes_by_day" in console.get("/api/d/failed_txn/overview", {}, "dobe", "admin")
     assert console.get("/api/d/failed_txn/anomalies", {}, "dobe", "admin")["report"] is None
+
+
+def test_service_says_how_fresh_each_desk_is_and_what_is_held(console, tmp_path):
+    svc = console.get("/api/service", {}, "dobe", "admin")
+    sms = svc["desks"][0]
+    assert sms["health"]["stale"] is True and sms["health"]["minutes_since_last_run"] is None  # never ran
+    assert sms["mode_override"] is None and sms["emails_failed"] == 0 and sms["approval_mode"] == "unscripted"
+    assert {d["key"]: d["anomaly_watch"] for d in svc["desks"]} == {
+        "sms_alerts": True, "ecocash": True, "failed_txn": False}
+
+    audit = AuditLog(console.portals["sms_alerts"].s.state_db)
+    run_id = audit.start_run("live", "model")
+    audit.finish_run(run_id, 3, 2, 1)
+    audit.db.execute("INSERT INTO notifications (uuid, created_at, kind, channel, subject, status) "
+                     "VALUES ('u1', ?, 'reply_and_close', 'gateway', 's', 'failed')", (data.since_iso(0),))
+    audit.db.commit()
+    audit.close()
+    console.post("/api/d/sms_alerts/controls", {"mode_override": "notes", "note": "testing"}, "dobe", "admin")
+    sms = console.get("/api/service", {}, "dobe", "admin")["desks"][0]
+    assert sms["health"]["stale"] is False and sms["health"]["minutes_since_last_run"] < 1
+    assert sms["health"]["last_run_errors"] == 1 and sms["health"]["last_run_at"]
+    assert sms["mode_override"] == "notes" and sms["emails_failed"] == 1
+
+
+def test_classic_page_when_the_portal_is_not_built(console, tmp_path):
+    console.web_dir = tmp_path / "no-build"
+    assert b'id="desks"' in console.index_html()
+    body, kind, _ = console.page("/approvals")
+    assert b'id="desks"' in body and kind.startswith("text/html")
+    assert console.page("/assets/index-abc.js") is None
 
 
 def test_desk_paths_reach_that_desks_log_only(console):
@@ -92,7 +135,24 @@ def test_over_http_with_one_sign_in(console):
         status, body, _ = get("/api/service")
         assert status == 200 and len(json.loads(body)["desks"]) == 3
         status, body, _ = get("/")
+        assert b'<div id="root">' in body  # the portal
+        status, body, _ = get("/tickets/600512?desk=ecocash")
+        assert status == 200 and b'<div id="root">' in body  # its router reads the address
+        status, body, _ = get("/classic")
         assert b'meta name="portal" content="served"' in body and b'id="desks"' in body
+        status, body, headers = get("/assets/index-abc.js")
+        assert body == b"console.log('portal')" and headers["Content-Type"].startswith("text/javascript")
+        assert "immutable" in headers["Cache-Control"] and headers["X-Content-Type-Options"] == "nosniff"
+        _, _, headers = get("/assets/plex-400.woff2")
+        assert headers["Content-Type"] == "font/woff2"
+        for path in ("/assets/missing.js", "/assets/notes.txt", "/assets/..%2findex.html", "/favicon.ico",
+                     "/api/nothing"):
+            with pytest.raises(urllib.error.HTTPError) as err:
+                get(path)
+            assert err.value.code == 404, path
+        with pytest.raises(urllib.error.HTTPError) as err:  # pages are behind the sign-in too
+            urllib.request.urlopen(base + "/approvals", timeout=5)
+        assert err.value.code == 401
         _, _, headers = get("/api/d/sms_alerts/export/decisions.csv")
         assert "sms_alerts-decisions.csv" in headers["Content-Disposition"]
         req = urllib.request.Request(base + "/api/d/ecocash/controls", data=b'{"kill_switch": true}', method="POST",
@@ -103,3 +163,54 @@ def test_over_http_with_one_sign_in(console):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_teaching_a_desk_through_the_console(console):
+    audit = AuditLog(console.portals["failed_txn"].s.state_db)
+    cursor = audit.db.execute("INSERT INTO decisions (run_id, created_at, mode, ticket_id, ticket_number, final_action) "
+                              "VALUES ('r', ?, 'live', 9, '700512', 'escalate')", (data.since_iso(0),))
+    audit.db.commit()
+    decision_id = cursor.lastrowid
+    audit.close()
+    note = {"decision_id": decision_id, "title": "Response 91 is a timeout",
+            "body": "Postilion response 91 means the issuer did not answer in time; check core banking first."}
+
+    taught = console.post("/api/d/failed_txn/knowledge", note, "viewer1", "viewer")
+    assert taught["status"] == "proposed" and taught["source_ticket"] == "700512"
+    svc = console.get("/api/service", {}, "dobe", "admin")
+    assert {d["key"]: d["knowledge_pending"] for d in svc["desks"]}["failed_txn"] == 1
+    listing = console.get("/api/d/failed_txn/knowledge", {}, "dobe", "admin")
+    assert listing["pending"] == 1 and listing["can_approve"] and "POST OFFICE" in listing["databases"]
+    assert set(listing["slot_kinds"]) >= {"account", "mobile", "date", "code"}
+
+    own = console.post("/api/d/failed_txn/knowledge", {**note, "title": "Another note"}, "dobe", "admin")
+    with pytest.raises(HttpError) as err:
+        console.post(f"/api/d/failed_txn/knowledge/{own['id']}", {"verdict": "approve"}, "dobe", "admin")
+    assert err.value.status == 403
+    with pytest.raises(HttpError) as err:
+        console.post(f"/api/d/failed_txn/knowledge/{taught['id']}", {"verdict": "approve"}, "viewer1", "viewer")
+    assert err.value.status == 403
+    on = console.post(f"/api/d/failed_txn/knowledge/{taught['id']}", {"verdict": "approve", "note": "ok"}, "dobe",
+                      "admin")
+    assert on["status"] == "active"
+    events = console.get("/api/d/failed_txn/controls", {}, "dobe", "admin")["events"]
+    assert any(e["action"] == f"switched on note K{taught['id']}" for e in events)
+    with pytest.raises(HttpError) as err:
+        console.post("/api/d/failed_txn/knowledge", {**note, "query": {"database": "POST OFFICE", "sql": "DELETE FROM x",
+                                                                       "slots": {}, "about": "x" * 50}}, "dobe", "admin")
+    assert err.value.status == 400 and "can only read" in err.value.message
+
+    portal = console.portals["failed_txn"]
+    portal.trials.execute = lambda number, item, original: {"final_action": "reply_and_close", "draft_used": True,
+                                                            "was": original["final_action"]}
+    trial = console.post("/api/d/failed_txn/knowledge/trials", {"decision_id": decision_id, "draft": note}, "viewer1",
+                         "viewer")
+    assert trial["ticket_number"] == "700512"
+    for _ in range(50):
+        got = console.get(f"/api/d/failed_txn/knowledge/trials/{trial['id']}", {}, "viewer1", "viewer")
+        if got["status"] != "running":
+            break
+        threading.Event().wait(0.02)
+    assert got["status"] == "done" and got["result"]["was"] == "escalate"
+    listed = console.get("/api/d/failed_txn/knowledge/trials", {"decision": str(decision_id)}, "viewer1", "viewer")
+    assert [t["id"] for t in listed["items"]] == [trial["id"]]

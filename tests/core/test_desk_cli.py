@@ -16,7 +16,7 @@ DESK_COMMANDS = {
     "nmb_connect": {"connect-lookup"},
 }
 SHARED = {"check", "run", "audit", "report", "compare", "portal", "portal-user", "notify-test", "notify-retry",
-          "attachments"}
+          "attachments", "knowledge-seed"}
 
 
 @pytest.mark.parametrize("desk", sorted(DESK_COMMANDS))

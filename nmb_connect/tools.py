@@ -20,6 +20,7 @@ from datetime import date, datetime
 from typing import Any, Optional
 
 from agentcore import sql
+from agentcore.dataquery import DataQuery, identifier_forms, run_tool
 from agentcore.metabase import MetabaseError
 from agentcore.pii import Pseudonymizer
 from .normalize import account_key, cif_key, day_text, format_timestamp, id_key, mobile_key, today_local
@@ -142,8 +143,8 @@ ASSESS_TOOL = {
     "name": "assess_access_issue",
     "description": (
         "Name the client's problem once you have looked them up. It works out where the client stands from what the "
-        "lookups returned, and gives the standard outcome and wording for the branch. A ticket can only be closed on "
-        "an assessment. Problems: " + "; ".join(f"{k}: {v}" for k, v in PROBLEMS.items()) + "."),
+        "lookups returned, and gives a suggested outcome in the helpdesk's usual wording (a starting point: write the "
+        "reply that fits the ticket). A ticket can only be closed on an assessment. Problems: " + "; ".join(f"{k}: {v}" for k, v in PROBLEMS.items()) + "."),
     "input_schema": {"type": "object", "properties": {
         "problem": {"type": "string", "enum": list(PROBLEMS)},
         "account_number": {"type": "string", "description": "For accounts_not_visible and account_inactive: the "
@@ -167,7 +168,7 @@ class Assessment:
     def describe(self) -> dict[str, Any]:
         out = {"problem": self.problem, "where_the_client_stands": self.status,
                "meaning": STATUS_TEXT.get(self.status, self.status),
-               "standard_outcome": {"action": self.action, "reply": self.reply or None}}
+               "suggested_outcome": {"action": self.action, "reply": self.reply or None}}
         if self.action == "request_info" and self.status in KEEP_OPEN:
             out["note"] = "Keeps the ticket open: the branch acts and replies, and the client is checked again."
         if self.action == "escalate":
@@ -200,6 +201,7 @@ class Evidence:
     check_errors: list = field(default_factory=list)
     tools_used: list = field(default_factory=list)
     refused: list = field(default_factory=list)
+    queries: dict = field(default_factory=dict)  # query_data calls by query_id (Q1, Q2, ...)
 
     @property
     def status(self) -> str:
@@ -222,7 +224,7 @@ class Evidence:
         return [p for p in self.profiles.values() if p.active and p.mobile9 in mobiles and p.cif not in self.client_cifs]
 
 
-# ---- the standard outcomes -------------------------------------------------------------------------------------
+# ---- the suggested outcomes (the helpdesk's usual answer; its knowledge is in knowledge_seed.json) -------------------------------------------------------------------------------------
 FORMATS = "the mobile can be captured as 07…, 7… or 263…"
 HANDSET_STEPS = ("Kindly ask the client to check the blocked or spam SMS folder (Android Messages: Spam & blocked; "
                  "Samsung Messages: Settings, Block numbers and messages, Blocked messages; iPhone: Settings, Messages, "
@@ -467,8 +469,10 @@ def _assess_account(problem: str, ev: Evidence, account: Optional[str], opened: 
 class Toolbox:
     def __init__(self, registration: Optional[Registration] = None, core: Optional[CoreBanking] = None,
                  activity: Optional[AppActivity] = None, failures: Optional[RegistrationFailures] = None,
-                 sms: Optional[SmsGateway] = None, activity_days: int = 14, sms_days: int = 7) -> None:
+                 sms: Optional[SmsGateway] = None, activity_days: int = 14, sms_days: int = 7,
+                 data: Optional[DataQuery] = None) -> None:
         self.registration, self.core, self.activity, self.failures, self.sms = registration, core, activity, failures, sms
+        self.data = data if data is not None and data.sources else None
         self.activity_days, self.sms_days = activity_days, sms_days
         self.as_of: Optional[date] = None  # closed-ticket replays: what was known then
 
@@ -484,6 +488,8 @@ class Toolbox:
             tools.append(FAILURES_TOOL)
         if self.sms is not None:
             tools.append(SMS_TOOL)
+        if self.data is not None:
+            tools.append(self.data.tool_schema())
         tools.append(ASSESS_TOOL)
         return tools
 
@@ -498,6 +504,12 @@ class Toolbox:
             evidence.ticket_cifs = set(evidence.known.cifs)
             evidence.ticket_mobiles = set(owner.mobiles)
         try:
+            if name == "query_data" and self.data is not None:
+                data = self._query_data(pseudo.unmask_obj(args or {}), evidence, ticket is not None)
+                data.pop("_no_follow_ups", None)  # this desk's results never widen what may be searched
+                evidence.tools_used.append(name)
+                text = json.dumps(pseudo.mask_obj(data), default=str, ensure_ascii=False)
+                return (text[:MAX_RESULT_CHARS] + " ...[truncated]") if len(text) > MAX_RESULT_CHARS else text, False
             values = self._inputs(pseudo.unmask_obj(args or {}), evidence, ticket is not None)
             if name == "get_connect_profile" and self.registration is not None:
                 data = self._profile(values, evidence)
@@ -518,6 +530,10 @@ class Toolbox:
         except (ValueError, sql.UnsafeValue) as exc:
             return f"Invalid input: {pseudo.mask(str(exc))}", True
         except MetabaseError as exc:
+            if name == "query_data":  # an exploratory read that failed does not hold up the ticket
+                evidence.unavailable.append(f"query_data {str((args or {}).get('source'))[:40]}")
+                return pseudo.mask(f"Query failed (data source error): {exc}. Check the columns and filters, or "
+                                   "try another source.")[:800], True
             evidence.check_errors.append(f"{name}: {exc}"[:300])
             return pseudo.mask(f"Lookup failed (data source error): {exc}. You may retry once.")[:800], True
         evidence.tools_used.append(name)
@@ -525,6 +541,31 @@ class Toolbox:
         if len(text) > MAX_RESULT_CHARS:
             text = text[:MAX_RESULT_CHARS] + " ...[truncated]"
         return text, False
+
+    def _query_data(self, request: dict[str, Any], evidence: Evidence, enforce: bool) -> dict[str, Any]:
+        """query_data (agentcore.dataquery), matched only on a CIF, account or mobile this ticket gives or an earlier
+        lookup found to be the client's."""
+        assert self.data is not None
+        pools = {"cif": (cif_key, "cifs"), "account": (account_key, "accounts"), "mobile": (mobile_key, "mobiles")}
+
+        def identify(kind: str, raw: str) -> list:
+            if raw.startswith("<") and raw.endswith(">"):
+                raise ValueError(f"match_value: {raw} is not a value from this ticket")
+            if kind not in pools:
+                raise ValueError(f"this desk cannot match on a {kind}")
+            keyer, pool = pools[kind]
+            key = keyer(raw)
+            if key is None:
+                raise ValueError(f"match_value is not a valid {kind}")
+            if enforce and key not in getattr(evidence.known, pool):
+                evidence.refused.append(f"query_data {kind}")
+                raise ValueError(f"match_value ({kind}) is not on this ticket or the client's in an earlier result")
+            return identifier_forms(kind, raw)
+
+        out = run_tool(self.data, request, identify, evidence.queries, as_of=self.as_of)
+        evidence.searches.append({"tool": "query_data", "args": {"source": evidence.queries[out["query_id"]]["source"]},
+                                  "found": out["rows_shown"]})
+        return out
 
     # ---- inputs ------------------------------------------------------------------------------------
     def _inputs(self, args: dict[str, Any], evidence: Evidence, enforce: bool) -> dict[str, Any]:

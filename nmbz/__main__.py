@@ -22,19 +22,18 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
+from agentcore import logsafe
 from agentcore.config import ROOT
 from . import desks as registry
 
 log = logging.getLogger("nmbz")
 SERVICE_COMMANDS = ("run", "check", "portal", "portal-user", "desks")
-DESK_COMMANDS = ("audit", "compare", "report", "anomalies", "attachments", "notify-test", "notify-retry")
+DESK_COMMANDS = ("audit", "compare", "report", "anomalies", "attachments", "notify-test", "notify-retry",
+                 "knowledge-seed")
 
 
 def _logging(verbose: bool) -> None:
-    logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO,
-                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    for noisy in ("httpx", "httpcore", "anthropic"):
-        logging.getLogger(noisy).setLevel(logging.WARNING)
+    logsafe.setup(verbose)  # customer numbers and secrets never reach the journal
 
 
 def _service_lock():

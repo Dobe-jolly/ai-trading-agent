@@ -66,6 +66,7 @@ class Runner(DeskRunner):
             max_info_requests=self.s.max_info_requests,
             agent_staff_id=self.s.reply_staff_id,
             topics=self.s.topics,
+            allow_query_close=self.s.query_close,
         )
 
     def standard_action(self, ticket: Ticket, result: AgentResult) -> Optional[str]:

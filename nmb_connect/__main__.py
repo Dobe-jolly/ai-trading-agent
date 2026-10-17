@@ -15,6 +15,7 @@ from typing import Any, Optional
 
 from agentcore.audit import AuditLog
 from agentcore.cli import DeskCli
+from agentcore.dataquery import build_for_desk, check_lines
 from agentcore.metabase import MetabaseClient, MetabaseError
 from . import notify
 from .config import BASE_DIR, Settings
@@ -50,18 +51,19 @@ class NmbConnectCli(DeskCli):
             failures=RegistrationFailures(mb, found["failures"]) if found["failures"] is not None else None,
             sms=SmsGateway(mb, found["socket"]) if found["socket"] is not None else None,
             activity_days=s.activity_days, sms_days=s.sms_days,
+            data=build_for_desk(mb, "nmb_connect", s.query_data, s.data_catalogue),
         )
 
     def build_runner(self, s: Settings, mode: str, mb: MetabaseClient, audit: AuditLog):
-        import anthropic
-
         from agentcore.writer import OsTicketWriter, ShadowWriter
         from .loop import TicketAgent
         from .runner import Runner
 
         store = self.build_store(s, mb)
         toolbox = self.build_toolbox(s, mb)
-        client = anthropic.Anthropic(api_key=s.anthropic_api_key, max_retries=3)
+        from agentcore.sdk_backend import build_client
+
+        client = build_client(s, 3)
         agent = TicketAgent(client, model=s.model, system_prompt=self.load_prompt(
             s, ACTIVITY_DAYS=s.activity_days, SMS_DAYS=s.sms_days, MAX_INFO_REQUESTS=s.max_info_requests),
             toolbox=toolbox, max_turns=s.max_agent_turns, agent_staff_id=s.reply_staff_id)
@@ -139,6 +141,8 @@ class NmbConnectCli(DeskCli):
                 else:
                     print(f"[reg] {table!r} not found: that part of the profile lookup is skipped")
             print("[reg] columns whose names suggest secrets, names or addresses are never shown to the model")
+        for line in check_lines(build_for_desk(mb, "nmb_connect", s.query_data, s.data_catalogue), s.query_data):
+            print(line)
         return ok
 
     def add_commands(self, sub: Any) -> dict:

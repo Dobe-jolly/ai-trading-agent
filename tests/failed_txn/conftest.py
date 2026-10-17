@@ -23,6 +23,7 @@ from tests.ecocash.conftest import (  # noqa: F401 - the shared doubles, re-expo
 )
 
 TICKET_DB, POSTOFFICE_DB, CONECT_DB, BILLERS_DB, IB_DB, STANDBY_DB = 121, 31, 32, 33, 34, 2
+ECOCASH_REG_DB = 16
 ACCOUNT = "86000013101001"
 OTHER_ACCOUNT = "86000099999999"
 RRN = "612345678901"
@@ -61,10 +62,19 @@ class FakeMetabase(_TicketFake):
         self.ib: dict[str, list[dict[str, Any]]] = {}
         self.core_accounts: dict[str, dict[str, Any]] = {ACCOUNT: {"currency": "USD"}}
         self.postings: list[dict[str, Any]] = []
+        self.asi_errors: dict[str, list[str]] = {}  # RRN -> core banking's interface errors
+        self.asi_answers: dict[str, list[dict[str, Any]]] = {}  # RRN -> core banking's ASIINNP/ASIOUTNP rows
+        self.clients: dict[str, list[str]] = {}  # CIF -> the client's account numbers
+        self.ecocash_links: list[dict[str, Any]] = []  # rows of public.ecocash_registration
+
+    NAMES = {"OSTICKETS_NEW": TICKET_DB, "POST OFFICE": POSTOFFICE_DB, "CONECT 2.0": CONECT_DB,
+             "BILLERS": BILLERS_DB, "IB": IB_DB, "STANDBY DB": STANDBY_DB, "Ecocash Reg": ECOCASH_REG_DB}
 
     def resolve(self, name: str) -> int:
-        return {"OSTICKETS_NEW": TICKET_DB, "POST OFFICE": POSTOFFICE_DB, "CONECT 2.0": CONECT_DB,
-                "BILLERS": BILLERS_DB, "IB": IB_DB, "STANDBY DB": STANDBY_DB}[name]
+        return self.NAMES[name]
+
+    def databases(self) -> list[dict[str, Any]]:  # query_data's catalogue: only BILLERS of its databases is here
+        return [{"id": i, "name": n, "engine": "postgres"} for n, i in self.NAMES.items()]
 
     # ---- fixtures ------------------------------------------------------------------
     def add_ticket(self, ticket_id: int, number: str, messages: list[str], *, topic: str = "Failed ZIPIT Transaction",
@@ -96,6 +106,11 @@ class FakeMetabase(_TicketFake):
 
     # ---- the API ---------------------------------------------------------------------
     def query(self, database_id: int, sql: str) -> list[dict[str, Any]]:
+        if database_id == ECOCASH_REG_DB:
+            self.sql_log.append((database_id, sql))
+            accounts = set(re.findall(r"'(\d+)'", sql.split("TRIM(msisdn)")[0])) if "TRIM(account_id)" in sql else set()
+            mobiles = set(re.findall(r"'(\d+)'", sql.split("TRIM(msisdn)")[1])) if "TRIM(msisdn)" in sql else set()
+            return [dict(r) for r in self.ecocash_links if r["account_id"].strip() in accounts or r["msisdn"] in mobiles]
         if database_id in (POSTOFFICE_DB, CONECT_DB, BILLERS_DB, IB_DB) or (database_id == STANDBY_DB and "NMBPRODIDC" in sql):
             self.sql_log.append((database_id, sql))
             for pattern in self.fail_patterns:
@@ -184,12 +199,26 @@ class FakeMetabase(_TicketFake):
                 and (band is None or band[0] <= float(r["transaction_value"]) <= band[1])]
 
     def _core(self, sql: str) -> list[dict[str, Any]]:
+        if "ACNTS_CLIENT_NUM =" in sql:
+            cif = re.search(r"ACNTS_CLIENT_NUM = (\d+)", sql).group(1)
+            return [{"IACLINK_ACTUAL_ACNUM": a, "ACNTS_CURR_CODE": (self.core_accounts.get(a) or {}).get("currency", "USD"),
+                     "ACNTS_OPENING_DATE": "2020-01-15T00:00:00", **(self.core_accounts.get(a) or {}).get("flags", {})}
+                    for a in self.clients.get(cif, [])]
+        if "ASIOUTNP" in sql:  # Intellect's answers (its query also reads ASIERRLOG, so this goes first)
+            rrn = re.search(r"ASIIN_FIELD_037 = '(\w+)'", sql).group(1)
+            return [dict(r) for r in self.asi_answers.get(rrn, [])]
+        if "ASIERRLOG" in sql:
+            rrn = re.search(r"ASIIN_FIELD_037 = '(\w+)'", sql).group(1)
+            return [{"ERR_LOG_DATETIME": "2026-01-16 10:28:00", "ERR_PGM_ID": "ASIHANDLER", "ERR_DESC": d}
+                    for d in self.asi_errors.get(rrn, [])]
         if "ROWNUM <= 1" in sql and "IACLINK" not in sql:  # the check command: is the TRAN table readable
             return [{"OK": 1}]
-        acct = account_key(re.search(r"IACLINK_ACTUAL_ACNUM = '(\d+)'", sql).group(1))
+        acct = account_key(re.search(r"IACLINK_ACTUAL_ACNUM (?:= |IN \()'(\d+)'", sql).group(1))
         if "ACNTS_CURR_CODE" in sql and "TRAN_DATE_OF_TRAN" not in sql:
             data = self.core_accounts.get(acct.zfill(14)) or self.core_accounts.get(acct)
-            return [] if data is None else [{"IACLINK_INTERNAL_ACNUM": "IA" + acct[-6:], "ACNTS_CURR_CODE": data["currency"]}]
+            return [] if data is None else [{"IACLINK_ACTUAL_ACNUM": acct.zfill(14), "IACLINK_INTERNAL_ACNUM": "IA" + acct[-6:],
+                                             "ACNTS_CURR_CODE": data["currency"],
+                                             **data.get("flags", {})}]
         year = re.search(r"TRAN(\d{4})", sql).group(1)
         start, end = re.findall(r"TO_DATE\('([\d-]+)'", sql)
         lo, hi = (datetime.strptime(x, "%d-%m-%Y").strftime("%Y-%m-%d") for x in (start, end))

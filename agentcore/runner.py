@@ -12,7 +12,7 @@ import logging
 import re
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -20,6 +20,7 @@ from .approval import ApprovalStore, token_map
 from .audit import AuditLog, is_stale
 from .decision import ESCALATE, NO_ACTION, REPLY_ACTIONS, REPLY_AND_CLOSE, REQUEST_INFO, Decision
 from .guardrails import GuardrailResult, reply_problems
+from .knowledge import DEFAULT_PROMPT_CHARS, Item, KnowledgeStore, KnowledgeTools, prompt_block, used_ids
 from .loop import AgentError, AgentResult
 from .metabase import MetabaseError
 from .normalize import now_local, parse_timestamp, today_local
@@ -29,6 +30,9 @@ from .pii import Pseudonymizer
 log = logging.getLogger(__name__)
 REQUEST_EXPIRED = "request for information expired"
 EXPIRED_CATEGORY = "request_info_timeout"
+REOPEN_WINDOW_DAYS = 30        # how long after the agent closed a ticket a reopen counts against it
+REOPEN_CHECK_EVERY_HOURS = 6   # how often each closed ticket is looked at again
+REOPEN_BATCH = 200
 
 
 @dataclass
@@ -203,6 +207,7 @@ class DeskRunner:
         full_run = not ticket_number
         self.audit.live_start(summary.run_id)
         self.agent.on_step = self.audit.live_step
+        self.load_knowledge()
         if self.anomaly is not None:
             self.agent.context = self.anomaly.context()
             if self.agent.context:
@@ -273,6 +278,8 @@ class DeskRunner:
                 summary.emails = self.notifier.dispatch(self.s.notify_max_attempts)
             if self.anomaly is not None and full_run and not self.s.kill_switch_file.exists():
                 self.anomaly.maybe_run()
+            if full_run:
+                self.check_reopened()
         finally:
             self.audit.live_end()
             self.audit.finish_run(summary.run_id, summary.seen, summary.decided, summary.errors)
@@ -559,6 +566,7 @@ class DeskRunner:
                 files: Optional[Any] = None, **extra: Any) -> int:
         p, f = guard.proposed, guard.final
         has_files = files is not None and files.attachments
+        mask = result.pseudo  # the model's own text, masked again: a number it typed (from an image, say) is kept out
         return self.audit.record(
             **base,
             branch=getattr(ticket, "org_name", None),
@@ -566,23 +574,95 @@ class DeskRunner:
             final_action=f.action,
             confidence=p.confidence,
             category=p.category,
-            reason=p.reason,
-            evidence=p.evidence,
+            reason=mask.mask(p.reason or ""),
+            evidence=mask.mask_obj(p.evidence),
             guardrail_notes=guard.notes,
             tools_used=getattr(result.evidence, "tools_used", None),
             deferred=int(guard.deferred),
-            transcript=result.transcript,
+            transcript=mask.mask_obj(result.transcript),
             attachments=result.pseudo.mask_obj(files.log_rows()) if has_files else None,
             input_tokens=result.input_tokens + (files.input_tokens if files is not None else 0),
             output_tokens=result.output_tokens + (files.output_tokens if files is not None else 0),
-            reply_text=p.reply_text,
+            reply_text=mask.mask(p.reply_text) if p.reply_text else p.reply_text,
+            **self.trace_fields(result),
             **self.record_fields(ticket, result),
             **extra,
         )
 
+    # ---- what staff taught the desk, and what each decision used ------------------------------------
+    def load_knowledge(self, draft: Optional[Item] = None) -> list[Item]:
+        """Give the agent the desk's switched-on notes (and a draft being tried, agentcore.trial). Returns the notes
+        left out because the prompt budget ran out. A failure here never stops a pass: the desk runs as before."""
+        if not hasattr(self.agent, "use_knowledge"):
+            return []
+        try:
+            items = KnowledgeStore(self.audit.db).active() + ([draft] if draft else [])
+        except Exception:  # noqa: BLE001
+            log.exception("Could not read the desk's notes; running without them")
+            return []
+        block, included, left_out = prompt_block(items, int(getattr(self.s, "knowledge_max_chars", None)
+                                                            or DEFAULT_PROMPT_CHARS))
+        tools = KnowledgeTools(included, getattr(self.store, "mb", None))
+        self.agent.use_knowledge(block, tools if tools else None, [i.id for i in included if not i.draft])
+        if included:
+            log.info("Staff notes on: %s%s", ", ".join(i.label for i in included),
+                     f" (left out, over the prompt budget: {', '.join(i.label for i in left_out)})" if left_out else "")
+        return left_out
+
+    def trace_fields(self, result: AgentResult) -> dict[str, Any]:
+        """Which prompt and notes produced a decision, so it can be traced and a bad note switched off."""
+        active = list(getattr(self.agent, "knowledge_ids", []) or [])
+        decision = result.decision
+        return {
+            "prompt_version": getattr(self.agent, "prompt_version", None),
+            "knowledge_active": active,
+            "knowledge_used": used_ids(result.transcript, [decision.reason, *(decision.evidence or [])], active),
+        }
+
+    # ---- did tickets the agent closed stay closed? ---------------------------------------------------
+    def check_reopened(self) -> int:
+        """Mark agent-closed tickets that were reopened since: the reopen rate is the best single measure of a
+        closing agent's quality (shown on the console's Review page). Never stops a pass."""
+        reader = getattr(self.store, "reopen_states", None)
+        if reader is None:
+            return 0
+        try:
+            rows = self.audit.db.execute(
+                "SELECT id, ticket_id, created_at FROM decisions WHERE final_action = ? AND executed LIKE '%\"close\"%' "
+                "AND reopened_at IS NULL AND created_at >= ? AND (outcome_checked_at IS NULL OR outcome_checked_at < ?) "
+                "ORDER BY id DESC LIMIT ?",
+                (REPLY_AND_CLOSE, _hours_ago(REOPEN_WINDOW_DAYS * 24), _hours_ago(REOPEN_CHECK_EVERY_HOURS),
+                 REOPEN_BATCH)).fetchall()
+            if not rows:
+                return 0
+            states = reader([int(r["ticket_id"]) for r in rows])
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Reopen check skipped: %s", exc)
+            return 0
+        reopened = 0
+        checked = _hours_ago(0)
+        for row in rows:
+            state = states.get(int(row["ticket_id"]))
+            when = None
+            if state is not None:
+                at = parse_timestamp(state.get("reopened"))
+                closed_at = parse_timestamp(row["created_at"])
+                if at is not None and closed_at is not None and at > closed_at:
+                    when = at.isoformat(timespec="seconds")
+                elif str(state.get("status_state") or "").lower() == "open":
+                    when = checked
+            self.audit.db.execute("UPDATE decisions SET outcome_checked_at = ?, reopened_at = ? WHERE id = ?",
+                                  (checked, when, row["id"]))
+            reopened += when is not None
+        self.audit.db.commit()
+        if reopened:
+            log.info("%d ticket(s) the agent closed were reopened since", reopened)
+        return reopened
+
     # ---- closed-ticket replay: what would the agent have said, against what staff posted ---------
     def audit_closed(self, since: date, limit: Optional[int], window_today: bool, out_dir: Path) -> Path:
         run_id = self.audit.start_run("audit", self.s.model)
+        self.load_knowledge()
         tickets = self.closed_tickets(since)[: limit or None]
         threads = self.store.thread_ids(tickets)
         log.info("Audit: %d %s ticket(s) closed on/after %s", len(tickets), self.audit_scope, since)
@@ -634,7 +714,8 @@ class DeskRunner:
         self.toolbox.as_of = None
         self.audit.finish_run(run_id, len(tickets), decided, errors)
         out_dir.mkdir(parents=True, exist_ok=True)
-        out = out_dir / f"closed_audit_since_{since.isoformat()}.csv"
+        desk = type(self).__module__.split(".")[0]  # each desk's report has its own name (sms_alerts, failed_txn...)
+        out = out_dir / f"closed_audit_{desk}_since_{since.isoformat()}.csv"
         with out.open("w", newline="", encoding="utf-8") as handle:
             fields = list(rows[0]) if rows else ["ticket_num"]
             writer = csv.DictWriter(handle, fieldnames=fields)
@@ -643,6 +724,10 @@ class DeskRunner:
         actions = Counter(r["agent_action"] for r in rows)
         log.info("Audit done: %d decided, %d errors, actions %s -> %s", decided, errors, dict(actions), out)
         return out
+
+
+def _hours_ago(hours: float) -> str:
+    return (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat(timespec="seconds")
 
 
 def _statuses(result: AgentResult) -> str:

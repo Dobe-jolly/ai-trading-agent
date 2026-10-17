@@ -356,6 +356,17 @@ ORDER BY created ASC, id ASC"""
             last_entry_id=last_entry,
         )
 
+    def reopen_states(self, ticket_ids: list[int]) -> dict[int, dict[str, Any]]:
+        """For tickets the agent closed: osTicket's last reopen time and the status state now (one query)."""
+        if not ticket_ids:
+            return {}
+        ids = ", ".join(sql.integer(i) for i in ticket_ids)
+        query = f"""SELECT t.ticket_id, t.reopened, s.state AS status_state
+FROM ost_ticket t
+JOIN ost_ticket_status s ON (t.status_id = s.id)
+WHERE t.ticket_id IN ({ids})"""
+        return {int(r["ticket_id"]): r for r in self.mb.query(self.db, query)}
+
     def staff_poster_name(self, staff_id: int) -> str:
         rows = self.mb.query(
             self.db, f"SELECT staff_id, username, firstname, lastname FROM ost_staff WHERE staff_id = {sql.integer(staff_id)}"

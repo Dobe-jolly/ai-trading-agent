@@ -71,13 +71,36 @@ class Details:
     references: set = field(default_factory=set)  # reference_key values
     amounts: set = field(default_factory=set)     # Decimal
     dates: set = field(default_factory=set)       # date
+    cifs: set = field(default_factory=set)        # customer numbers (digits, no leading zeros)
 
     def update(self, other: "Details") -> None:
-        for name in ("accounts", "mobiles", "references", "amounts", "dates"):
+        for name in ("accounts", "mobiles", "references", "amounts", "dates", "cifs"):
             getattr(self, name).update(getattr(other, name))
 
     def __bool__(self) -> bool:
-        return bool(self.accounts or self.mobiles or self.references)
+        return bool(self.accounts or self.mobiles or self.references or self.cifs)
+
+
+# A customer number (CIF) as branches write it: "CIF 191565", "CIF no: 191565", "customer number 191565", "CIF is ..."
+CIF_RE = re.compile(r"(?i)\b(?:cif|customer\s*(?:no|number|#)|client\s*(?:no|number|#))\s*(?:no\.?|number|#)?"
+                    r"\s*(?:(?:is|was)\b\s*)?[:#=.\-]?\s*(\d{4,12})\b")
+# A bare 6 to 9 digit number in the subject: branches often put the client's CIF there with no label. (Shorter is
+# rarely a CIF; 10 digits and more is an account number.)
+SUBJECT_NUMBER_RE = re.compile(r"(?<![\d.,:/-])\d{6,9}(?![\d.,:/-])")
+
+
+def cif_key(value: Any) -> Optional[str]:
+    digits = re.sub(r"\D", "", str(value or "")).lstrip("0")
+    return digits if 4 <= len(digits) <= 12 else None
+
+
+def subject_cifs(subject: Optional[str]) -> set:
+    """Bare numbers in the subject that may be the client's CIF (not a mobile number)."""
+    out = set()
+    for m in SUBJECT_NUMBER_RE.finditer(subject or ""):
+        if mobile_key(m.group(0)) is None and cif_key(m.group(0)):
+            out.add(cif_key(m.group(0)))
+    return out
 
 
 def find_details(text: str) -> Details:
@@ -92,6 +115,10 @@ def find_details(text: str) -> Details:
         if day:
             found.dates.add(day)
     found.amounts |= find_amounts(text)
+    for m in CIF_RE.finditer(text):
+        key = cif_key(m.group(1))
+        if key:
+            found.cifs.add(key)
     for m in MOBILE_RE.finditer(text):
         key = mobile_key(m.group(0))
         if key:
@@ -101,7 +128,9 @@ def find_details(text: str) -> Details:
     for m in ACCOUNT_RE.finditer(no_dates):
         raw = re.sub(r"[\s-]", "", m.group(0))
         key = account_key(raw)
-        if key and len(key) >= 9:
+        # Nine significant digits at least, or a zero-padded number of 10+ digits (corporate accounts are written
+        # 00000021269522: eight digits once the zeros go).
+        if key and (len(key) >= 9 or (raw.startswith("0") and len(raw) >= 10 and len(key) >= 6)):
             found.accounts.add(key)
         if len(raw) == 12:  # a 12-digit number may be an RRN as well as an account
             found.references.add(raw)
@@ -137,6 +166,7 @@ class Ticket(TicketThread):
 
     def owner_details(self) -> Details:
         found = find_details(self.owner_text())
+        found.cifs |= {c for c in subject_cifs(self.subject) if c not in found.accounts}
         for e in self.entries:  # digits read from the owner's files may be unformatted
             if e.type == "M":
                 for a in e.attachments:

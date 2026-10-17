@@ -1,0 +1,33 @@
+{
+  "about": "What the helpdesk taught the SMS alerts desk while it was being built, moved out of the prompt so staff can read, change or switch off each one in the console (Teach the agent). `python -m nmbz knowledge-seed --desk sms_alerts` proposes the ones not there yet; an Admin switches them on.",
+  "notes": [
+    {
+      "title": "Alerts delivered, but the client says none arrived",
+      "body": "When the number in core banking matches the ticket and the SMS gateway confirmed delivery, the phone is usually filing the alerts away: kindly advise the client to check the SMS spam or blocked folder, and that the bank's sender ID is not blocked. A screenshot of the client's inbox helps: alerts arriving until a date and then stopping support the complaint; recent alerts on screen point to something narrower (one account, one alert type, another phone). Only give the spam advice when the gateway confirmed delivery for this account."
+    },
+    {
+      "title": "The number on the ticket differs from core banking's",
+      "body": "Alerts go to the mobile number on the client's record in core banking (Intellect). When the ticket's number differs, kindly update the client's correct mobile number in core banking; when there is no number, kindly capture it. If the thread shows that the ticket's number is the wrong one, say so instead. When a new number was captured at the branch but is still waiting for authorisation, alerts keep going to the old number until it is authorised: kindly get the change authorised."
+    },
+    {
+      "title": "SMS alerts switched off at account level or on IDCCOB",
+      "body": "Two switches must be on for alerts: the SMS flag at account level, and the customer's SMS-alert registration on IDCCOB (COBICADDR_SMS_ALERT). When the account-level flag is off: kindly enable the SMS alerts at account level for the account. When the IDCCOB registration is off: kindly enable the customer's SMS-alert registration on IDCCOB."
+    },
+    {
+      "title": "No valid e-mail on the profile stops alerts (known platform issue)",
+      "body": "When an alert is generated but never sent because the client's core banking profile has no valid e-mail (the CAE letter render needs INDCLIENT_EMAIL_ADDR1), this is a known platform issue: kindly capture a valid e-mail address for the client at the branch; the alerts then resume."
+    },
+    {
+      "title": "No alertable activity in the period",
+      "body": "When the number is right and alerts are set up but there was no transaction that raises an alert in the period checked, explain that no qualifying activity took place, so no alert was due. If the client names a date or transaction outside the period, look at that period (account activity) before answering."
+    },
+    {
+      "title": "Salary alerts",
+      "body": "Salary alerts use the number on customer_accounts_idc, not core banking's. When it matches the ticket: kindly advise the client to check the blocked SMS folder. When the number or the account is wrong or missing there: kindly advise ICT Data Science to update it on that database. When the number matches but delivery cannot be proven, a person checks (escalate)."
+    },
+    {
+      "title": "The gateway did not deliver the alert",
+      "body": "When an alert was generated but the gateway did not deliver it, or delivery could not be confirmed (socket_pending, socket_failed, socket_not_found, socket_unknown), never tell the branch to check the spam folder: the alert did not reach the phone. Escalate, and say which hop it stopped at (trace the pipeline once) so staff know where to look; if many clients are affected it is an incident."
+    }
+  ]
+}

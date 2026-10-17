@@ -1,0 +1,6 @@
+{
+  "service": "intellect-idc",
+  "format": "journald",
+  "about": "integration service in front of Intellect (core banking) for the channels: balance enquiry, internal funds transfers (biller and wallet flows), transaction-limit validation and the account cache; calls the Intellect web services and a queue",
+  "correlation": {}
+}

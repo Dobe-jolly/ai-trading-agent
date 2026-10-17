@@ -27,8 +27,11 @@ from ..approval import ApprovalStore, summary as approval_summary, token_map
 from ..audit import AuditLog
 from ..controls import effective_mode, kill_switch_on, read_mode_override, set_kill_switch, set_mode_override
 from ..guardrails import reply_problems
+from ..knowledge import (DEFAULT_PROMPT_CHARS, MAX_QUERY_ROWS, ROWS_TO_MODEL, SLOT_KINDS, Draft, KnowledgeError,
+                         KnowledgeStore, prompt_block)
 from ..notify import OUTBOX_SCHEMA
 from ..pii import Pseudonymizer
+from ..trial import TrialError, TrialRunner
 from . import data as core_data
 from .users import UserStore
 
@@ -73,7 +76,10 @@ class Portal:
         audit = AuditLog(settings.state_db)  # make sure the schema exists
         audit.db.executescript(OUTBOX_SCHEMA)
         ApprovalStore(audit.db)  # the decision lists read each held reply's approval
+        KnowledgeStore(audit.db)  # what staff taught the desk (agentcore.knowledge)
         audit.close()
+        self.desk_key = type(self).__module__.split(".")[0]  # each desk's Portal lives in <desk>.portal.server
+        self.trials = TrialRunner(self.desk_key, settings)
         self._auth_cache: dict[str, tuple[str, float]] = {}
         self._failures: dict[str, list[float]] = {}
         self._lock = threading.Lock()
@@ -134,11 +140,13 @@ class Portal:
         conn = self.connect()
         try:
             waiting = self.data.pending_approvals(conn)
+            notes_waiting = KnowledgeStore(conn).pending()
         finally:
             conn.close()
         return {
             "anomaly": anomaly,
             "approvals_pending": waiting,
+            "knowledge_pending": notes_waiting,
             "approval_mode": self.s.approval_mode,
             "user": user, "role": role, "demo": False,
             "configured_mode": self.s.mode,
@@ -210,9 +218,103 @@ class Portal:
                 result["can_retry"] = role == "admin"
                 result["transport"] = self.s.notify_transport
                 return result
+            if path == "/api/knowledge":
+                return self.knowledge(conn, user, role)
+            if path == "/api/knowledge/trials":
+                try:
+                    decision_id = int(params.get("decision") or 0)
+                except ValueError:
+                    raise HttpError(400, "decision must be a decision id.") from None
+                return {"items": self.trials.store.for_decision(decision_id) if decision_id else []}
+            match = re.fullmatch(r"/api/knowledge/trials/(\d+)", path)
+            if match:
+                trial = self.trials.store.get(int(match.group(1)))
+                if trial is None:
+                    raise HttpError(404, "No trial with that id.")
+                return trial
             raise HttpError(404, "Not found.")
         finally:
             conn.close()
+
+    # ---- what staff teach the desk (agentcore.knowledge, agentcore.trial) ---------------------------------
+    def knowledge(self, conn: sqlite3.Connection, user: str, role: str) -> dict[str, Any]:
+        store = KnowledgeStore(conn)
+        items = store.listing()
+        budget = int(getattr(self.s, "knowledge_max_chars", None) or DEFAULT_PROMPT_CHARS)
+        block, included, left_out = prompt_block(store.active(), budget)
+        return {
+            "items": items,
+            "pending": sum(1 for i in items if i["status"] == "proposed"),
+            "user": user,
+            "can_approve": role == "admin",
+            "prompt": {"max_chars": budget, "chars": len(block), "in_prompt": [i.id for i in included],
+                       "left_out": [i.id for i in left_out]},
+            "slot_kinds": {k: {"label": v["label"], "hint": v["hint"]} for k, v in SLOT_KINDS.items()},
+            "databases": self.database_names(),
+            "max_query_rows": MAX_QUERY_ROWS,
+            "rows_to_model": ROWS_TO_MODEL,
+        }
+
+    def database_names(self) -> list[str]:
+        """The Metabase databases this desk already reads (suggestions; a note may name another)."""
+        names = {str(v) for k, v in vars(self.s).items() if k.endswith("_db_name") and v}
+        return sorted(names, key=str.lower)
+
+    def _decision_row(self, audit: AuditLog, decision_id: Any) -> sqlite3.Row:
+        try:
+            row = audit.db.execute("SELECT id, ticket_number, final_action, proposed_action, confidence, reason, "
+                                   "reply_text FROM decisions WHERE id = ?", (int(decision_id),)).fetchone()
+        except (TypeError, ValueError):
+            row = None
+        if row is None:
+            raise HttpError(404, "No decision with that id.")
+        return row
+
+    def teach(self, audit: AuditLog, body: dict[str, Any], user: str) -> dict[str, Any]:
+        try:
+            draft = Draft.from_body(body)
+        except KnowledgeError as exc:
+            raise HttpError(400, str(exc)) from None
+        row = self._decision_row(audit, body["decision_id"]) if body.get("decision_id") else None
+        try:
+            item = KnowledgeStore(audit.db).propose(draft, user, row["id"] if row else None,
+                                                    row["ticket_number"] if row else None)
+        except KnowledgeError as exc:
+            raise HttpError(400, str(exc)) from None
+        audit.add_control_event(user, f"taught note K{item['id']}", str(item["title"])[:300])
+        return dict(item)
+
+    def decide_note(self, audit: AuditLog, item_id: int, body: dict[str, Any], user: str, role: str) -> dict[str, Any]:
+        verdict = str(body.get("verdict") or "")
+        try:
+            item = KnowledgeStore(audit.db).decide(item_id, verdict, user, role, body.get("note"))
+        except LookupError as exc:
+            raise HttpError(404, str(exc)) from None
+        except PermissionError as exc:
+            raise HttpError(403, str(exc)) from None
+        except KnowledgeError as exc:
+            raise HttpError(400, str(exc)) from None
+        except ValueError as exc:
+            raise HttpError(409, str(exc)) from None
+        verb = {"approve": "switched on", "reject": "turned down", "retire": "switched off",
+                "withdraw": "withdrew"}[verdict]
+        audit.add_control_event(user, f"{verb} note K{item_id}",
+                                "; ".join(x for x in (str(item["title"]), str(body.get("note") or "").strip()) if x)[:300])
+        return dict(item)
+
+    def try_note(self, audit: AuditLog, body: dict[str, Any], user: str) -> dict[str, Any]:
+        row = self._decision_row(audit, body.get("decision_id"))
+        try:
+            draft = Draft.from_body(body.get("draft") or {})
+        except KnowledgeError as exc:
+            raise HttpError(400, str(exc)) from None
+        problems = draft.problems()
+        if problems:
+            raise HttpError(400, " ".join(problems))
+        try:
+            return self.trials.start(user, row["ticket_number"], draft, int(row["id"]), original=dict(row))
+        except TrialError as exc:
+            raise HttpError(429, str(exc)) from None
 
     def decide_approval(self, audit: AuditLog, approval_id: int, body: dict[str, Any], user: str, role: str) -> Any:
         if role != "admin":
@@ -237,7 +339,7 @@ class Portal:
         except ValueError as exc:
             raise HttpError(409, str(exc)) from None
         audit.add_control_event(user, f"{verdict} reply for #{row['ticket_number']}",
-                                (("edited; " if row["edited"] else "") + (row["comment"] or ""))[:300])
+                                "; ".join(x for x in ("edited" if row["edited"] else "", row["comment"] or "") if x)[:300])
         return approval_summary(row)
 
     def export_csv(self, params: dict[str, str]) -> str:
@@ -271,6 +373,13 @@ class Portal:
             match = re.fullmatch(r"/api/approvals/(\d+)", path)
             if match:
                 return self.decide_approval(audit, int(match.group(1)), body, user, role)
+            if path == "/api/knowledge":
+                return self.teach(audit, body, user)
+            if path == "/api/knowledge/trials":
+                return self.try_note(audit, body, user)
+            match = re.fullmatch(r"/api/knowledge/(\d+)", path)
+            if match:
+                return self.decide_note(audit, int(match.group(1)), body, user, role)
             if path == "/api/notifications/retry":
                 if role != "admin":
                     raise HttpError(403, "Only admins can re-send emails.")
@@ -367,6 +476,12 @@ def make_handler(portal: Portal) -> type[BaseHTTPRequestHandler]:
                 user, role = self._user()
                 if url.path in ("/", "/index.html"):
                     return self._send(200, portal.index_html(), "text/html; charset=utf-8")
+                page = getattr(portal, "page", None)  # the console's own pages and files (see nmbz.console)
+                if page is not None and not url.path.startswith("/api/"):
+                    found = page(url.path)
+                    if found is not None:
+                        body, content_type, extra = found
+                        return self._send(200, body, content_type, extra)
                 if url.path.endswith("/export/decisions.csv"):
                     text, name = portal.export(url.path, params)
                     return self._send(200, text.encode("utf-8"), "text/csv; charset=utf-8",

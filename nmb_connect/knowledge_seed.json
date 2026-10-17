@@ -1,0 +1,41 @@
+{
+  "about": "What the helpdesk taught the NMB Connect desk while it was being built, moved out of the code so staff can read, change or switch off each one in the console (Teach the agent). `python -m nmbz knowledge-seed --desk nmb_connect` proposes the ones not there yet; an Admin switches them on.",
+  "notes": [
+    {
+      "title": "Already registered: delete the old profile on the dashboard",
+      "body": "When registration says the client is already registered, an old NMB Connect profile is in the way. The branch deletes the profile on the dashboard and the client registers again; the new profile picks up all the client's accounts. The same fix works when an active account does not show on NMB Connect. If the delete fails, the branch replies with a screenshot of the error. The ticket stays open until the branch confirms it is done, and the client is checked again then."
+    },
+    {
+      "title": "The client changed their mobile number",
+      "body": "The OTP and NMB Connect messages go to the number on the NMB Connect profile, not the one on the ticket or in core banking. If the client has a new number: the branch captures and authorises it on the CIF in IDCCOB, then e-mails ICT Data Science to update the number on the NMB Connect profile, and replies on the ticket once it is done. If the number on the profile is still the client's, the OTP is sent there. Changing the number is ICT Data Science's job, after IDCCOB."
+    },
+    {
+      "title": "OTP not received on the right number",
+      "body": "When the profile has the number the client uses and the gateway shows OTPs delivered, the phone is usually hiding them: kindly ask the client to check the blocked or spam SMS folder (Android Messages: Spam & blocked; Samsung Messages: Settings, Block numbers and messages, Blocked messages; iPhone: Settings, Messages, turn off Filter Unknown Senders), unblock the bank's sender, restart the phone and request a new OTP. If it still does not arrive, the branch replies on the ticket and the SMS gateway is checked. When OTPs to the number are failing at the gateway, ICT Data Science checks the gateway and the network: a person handles it."
+    },
+    {
+      "title": "Forgot username",
+      "body": "A registered client recovers the username themselves: on the login screen tap Forgot Username, enter the account number and the mobile number on the profile, submit, and enter the OTP that follows; the username is sent by SMS and e-mail. Never give out a username. If the OTP does not arrive, the client checks the blocked or spam SMS folder, then the branch replies on the ticket."
+    },
+    {
+      "title": "Client not registered on NMB Connect",
+      "body": "When there is no NMB Connect profile for the client's CIF, the branch registers the client and then the client logs in. The mobile can be captured as 07..., 7... or 263... (all receive SMS). A new profile picks up all the client's accounts. If the client changed number but has no profile, there is nothing to change: register with the new number."
+    },
+    {
+      "title": "Failed registrations: what each reason means",
+      "body": "The registration log gives a reason for a failed registration. CREDENTIAL_VALIDATION_FAILED: the e-mail or password entered did not match the bank's records; the client registers again with the e-mail on their bank profile (if that e-mail is wrong or missing, the branch updates it first). DB_QUERY_ERROR or UPSTREAM_TIMEOUT: a temporary system error; the client tries again, and if it fails again the branch replies with a screenshot. DUPLICATE_PROFILE: the client has more than one customer profile; ICT Data Science merges or removes the duplicate (a person). UNKNOWN: a person checks the registration service log. With no profile and no failed registration recorded, ask the branch for a screenshot of the error and the mobile the client registers with."
+    },
+    {
+      "title": "Duplicate profiles, a number on another profile, a locked profile",
+      "body": "These need a person. Two or more active profiles for one CIF: ICT Data Science removes the duplicate so that registration and login work. The ticket's mobile on a profile under another CIF: check whether it is the client's own old profile before anything is deleted; if it belongs to someone else, the client registers with another number. A locked or blocked profile: unlock it on the dashboard, or delete it and have the client register again. Registered with the right number, not locked, and still cannot log in: check the login history and app activity; the usual fix is to delete the profile and register again."
+    },
+    {
+      "title": "Accounts that are dormant, frozen or closed",
+      "body": "An account that is dormant or inoperative needs reactivating at the branch, a frozen one needs the freeze lifted, before it works on NMB Connect. When the account did not show on NMB Connect, after that the branch deletes the client's NMB Connect profile on the dashboard and the client registers again, so the new profile picks the account up. A closed account cannot be used: the client uses another account or opens a new one at the branch. An account under another CIF than the client's: confirm who owns it (joint or corporate account) before it is added to the client's NMB Connect."
+    },
+    {
+      "title": "Blocking mobile banking or EcoCash access",
+      "body": "The branch can block a client's mobile banking and EcoCash access on the dashboard, with the block option on the client's profile. If the dashboard gives an error, the branch replies on the ticket with a screenshot and ICT blocks it."
+    }
+  ]
+}

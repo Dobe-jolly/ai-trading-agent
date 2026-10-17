@@ -174,7 +174,7 @@ python -m nmbz --desk sms_alerts attachments --ticket 482913 --local   # text-ty
    python -m nmbz --env-file /etc/nmbz-agents/agents.env --desk sms_alerts audit --since 2026-09-01 --limit 100
    ```
 
-   This writes `reports/closed_audit_since_2026-09-01.csv`. Each row shows the statuses, the agent's action and reply, the Java's template reply, and the reply that was actually posted. The agent only sees the thread as it was before the desk responded, and the 15-day window is anchored to each ticket's close date, as in the Java audit. Each ticket costs model calls, so keep `--limit` sensible.
+   This writes `reports/closed_audit_sms_alerts_since_2026-09-01.csv` (each desk its own file). Each row shows the statuses, the agent's action and reply, the Java's template reply, and the reply that was actually posted. The agent only sees the thread as it was before the desk responded, and the 15-day window is anchored to each ticket's close date, as in the Java audit. Each ticket costs model calls, so keep `--limit` sensible.
 
 2. **Shadow (no writes).** Install the timer with `AGENT_MODE=shadow` while the Java is still live. After a few days, run:
 
@@ -217,6 +217,7 @@ Escalations send no email; staff pick them up from the internal note. The wordin
 
 **Transports:**
 - **`gateway`** (the default when `NOTIF_EMAIL_URL` is set) uses the bank notification gateway exactly as the Java `AdminNotifGateway` does: `POST NOTIF_EMAIL_URL` with `{to, subject, body, uuid, access_token}` and `Authorization: Basic NOTIF_GATEWAY_BASIC_AUTH`. Copy the three `NOTIF_*` values from the Java `sms-agent.env`.
+- **`mailapi`** uses the bank mail API: `POST MAIL_API_URL` with `{operation: "SEND_EMAIL", channel: MAIL_API_CHANNEL, accessToken: MAIL_API_TOKEN, uuid, requestBody: {to, subject, message}}`. The API has no cc, so `NOTIFY_CC` addresses are added to `to`; `uuid` is the e-mail's own id, the same on every retry. An HTTP error or an answer that says it failed counts as not sent and is retried. The token is never written to the log or the outbox; keep it only in the env file, and use an `https://` URL if the API offers one.
 - **`smtp`** sends through your mail relay and can set `Reply-To`. If osTicket fetches the `NOTIFY_REPLY_TO` mailbox, a branch can simply reply to the email. The `[#number]` in the subject threads the reply into the ticket as a new message, and the agent picks it up on its next pass.
 
 Test before going live (sends one sample email, nothing is queued):
@@ -409,3 +410,23 @@ The tests run against a fake Metabase that answers the ported SQL and a scripted
 - The write path.
 - The guardrails.
 - The full loop, including the wrong-number → ask → corrected-on-thread → close scenario.
+
+
+## query_data: tables beyond the checks
+
+The agent can also read the SMS dispatch service's own tables (database SMS) with `query_data`
+(`agentcore/dataquery.py`, catalogue `agentcore/data_catalogue.json`): every SMS sent or tried to a mobile (provider,
+dispatch status, failure reason; never the text), matched through the recipient table, and the recipient list
+(whether SMS is enabled for a mobile). A query takes only a masked number this ticket issued (from the ticket or an
+earlier result); counts without a match, to see whether sending is failing for everyone, carry no numbers. At most 25
+rows over at most 14 days. `python -m nmbz check --desk sms_alerts` tries each table's columns without reading rows;
+`QUERY_DATA=false` switches it off.
+
+## Staff knowledge and suggested replies
+
+What the helpdesk taught this desk lives in staff notes (Teach the agent), not in the prompt or code:
+`sms_alerts/knowledge_seed.json` holds them, and `python -m nmbz knowledge-seed --desk sms_alerts` proposes the ones not in the
+console yet. An Admin switches each on; from then on staff can change or switch off any of them without a code change.
+The notes: spam folder advice only when delivery was confirmed, a number that differs or is missing (and changes waiting for authorisation), the account-level SMS flag and the IDCCOB registration, the missing e-mail platform issue, no alertable activity, salary alerts, and gateway failures.
+
+The check still works out each account's status and gives the helpdesk's usual wording (`reply`) as a suggestion; the agent writes the reply that fits the ticket. The code keeps what protects the client: only the ticket's own numbers, every account on the ticket checked, and statuses where delivery is not confirmed (socket_*, salaries_unverified) never close.

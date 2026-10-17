@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from typing import Any, Optional
 
 import httpx
@@ -138,6 +139,27 @@ class MetabaseClient:
                 log.warning("Metabase read attempt %d/%d failed (%s); retrying", attempt, self._retry_count, exc)
                 time.sleep(self._retry_delay)
         raise MetabaseError(str(last))
+
+    def query_bound(self, database_id: int, sql: str, params: dict[str, tuple[str, Any]]) -> list[dict[str, Any]]:
+        """A read query written by a person, with {{name}} template tags that Metabase fills in: values are never
+        pasted into the SQL here. params: {name: (type, value)}, type text | number | date."""
+        tags, parameters = {}, []
+        for name, (kind, value) in params.items():
+            tag_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"nmbz-knowledge/{name}"))
+            tags[name] = {"id": tag_id, "name": name, "display-name": name, "type": kind}
+            target = ["variable", ["template-tag", name]]
+            if kind == "number":
+                parameters.append({"id": tag_id, "type": "number/=", "target": target, "value": [float(value)]})
+            elif kind == "date":
+                parameters.append({"id": tag_id, "type": "date/single", "target": target, "value": str(value)})
+            else:
+                parameters.append({"id": tag_id, "type": "category", "target": target, "value": str(value)})
+        payload = {"database": int(database_id), "type": "native",
+                   "native": {"query": sql, "template-tags": tags}, "parameters": parameters}
+        result = self._request("POST", "/api/dataset", payload)
+        if str(result.get("status", "")).lower() == "failed":
+            raise MetabaseError(self._error_text(result))
+        return self.rows(result)
 
     def write(self, database_id: int, sql: str) -> None:
         """INSERT/UPDATE. Not retried (a retry could double-post)."""

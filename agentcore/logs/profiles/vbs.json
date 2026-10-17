@@ -1,0 +1,9 @@
+{
+  "service": "vbs",
+  "format": "journald",
+  "about": "Virtual Branch Service (agency banking and cash withdrawal applications, branch list, commission cron); its LoggingServiceImpl lines are colon-separated columns",
+  "correlation": {
+    "requestUuid": ":([0-9a-fA-F-]{36})\\s+:(?:USSD|NMBCONNECT|AGENCY)",
+    "uuid": "uuid='([^']{4,64})'"
+  }
+}

@@ -13,6 +13,7 @@ reached EcoCash, 61 linked and 73 failed (47 of them 20503).
 """
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -31,6 +32,8 @@ from .normalize import (
     parse_timestamp,
     trim_to_none,
 )
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -273,6 +276,7 @@ class AttemptStore:
         self.legacy_table = legacy_table
         self._attempts_start: Optional[datetime] = None
         self._start_known = False
+        self._available: Optional[bool] = None
 
     @staticmethod
     def conditions(mobile: Optional[str], account: Optional[str], id_number: Optional[str]) -> list[str]:
@@ -294,13 +298,26 @@ class AttemptStore:
             raise ValueError("give at least one of mobile, account_number or id_number")
         return out
 
+    def attempts_available(self) -> bool:
+        """Whether the Python monitor's table is in this database. Until the monitor runs there, only the Java's
+        failed_ecocash_registrations are (failures only, no successful links), and lookups read that alone."""
+        if self._available is None:
+            try:
+                rows = self.mb.query(self.db, f"SELECT MIN(requested_at) AS first_at FROM {self.attempts_table}")
+            except MetabaseError as exc:
+                if not self.legacy_table:
+                    raise
+                log.warning("%s is not readable here (%s); reading %s only", self.attempts_table, str(exc)[:160],
+                            self.legacy_table)
+                self._available = False
+            else:
+                self._attempts_start = parse_timestamp(rows[0].get("first_at")) if rows else None
+                self._start_known = self._available = True
+        return bool(self._available)
+
     def attempts_start(self) -> Optional[datetime]:
         """When the Python monitor's records begin (the Java's failures fill in before that)."""
-        if not self._start_known:
-            rows = self.mb.query(self.db, f"SELECT MIN(requested_at) AS first_at FROM {self.attempts_table}")
-            self._attempts_start = parse_timestamp(rows[0].get("first_at")) if rows else None
-            self._start_known = True
-        return self._attempts_start
+        return self._attempts_start if self.attempts_available() else None
 
     def find(self, *, mobile: Optional[str] = None, account: Optional[str] = None, id_number: Optional[str] = None,
              days: int = 60, as_of: Optional[datetime] = None, limit: int = 30) -> Lookup:
@@ -308,11 +325,13 @@ class AttemptStore:
         where = " OR ".join(self.conditions(mobile, account, id_number))
         end = as_of or now_local()
         start = end - timedelta(days=days)
-        rows = self.mb.query(self.db, (
-            f"SELECT {self.ATTEMPT_COLUMNS} FROM {self.attempts_table} WHERE ({where}) "
-            f"AND requested_at >= {_ts_literal(start)} AND requested_at <= {_ts_literal(end)} "
-            f"ORDER BY requested_at DESC, id DESC LIMIT {sql.integer(limit)}"))
-        found = [LinkAttempt.from_attempt_row(r) for r in rows]
+        found: list[LinkAttempt] = []
+        if self.attempts_available():
+            rows = self.mb.query(self.db, (
+                f"SELECT {self.ATTEMPT_COLUMNS} FROM {self.attempts_table} WHERE ({where}) "
+                f"AND requested_at >= {_ts_literal(start)} AND requested_at <= {_ts_literal(end)} "
+                f"ORDER BY requested_at DESC, id DESC LIMIT {sql.integer(limit)}"))
+            found = [LinkAttempt.from_attempt_row(r) for r in rows]
         if self.legacy_table:
             first = self.attempts_start()
             legacy_end = min(end, first) if first else end
@@ -328,6 +347,8 @@ class AttemptStore:
 
     def counts(self, start: datetime, end: datetime, by_hour: bool) -> list[dict[str, Any]]:
         """Outcome counts per hour or day, by type and channel (anomaly watch)."""
+        if not self.attempts_available():
+            return []
         bucket = "date_trunc('hour', requested_at)" if by_hour else "date_trunc('day', requested_at)"
         kind = (f"CASE WHEN outcome IN ('linked', 'unlinked') THEN outcome WHEN outcome = 'no_response' "
                 f"THEN 'no_response' ELSE {classify_sql()} END")
@@ -338,6 +359,8 @@ class AttemptStore:
 
     def sample(self, start: datetime, end: datetime, outcome_sql: str, limit: int) -> list[dict[str, Any]]:
         """Recent attempts (no names) for the failed-vs-linked comparison."""
+        if not self.attempts_available():
+            return []
         return self.mb.query(self.db, (
             "SELECT operation, outcome, response_code, message, via, channel, mobile_number, account_number, "
             f"id_number, currency, requested_at, responded_at FROM {self.attempts_table} "

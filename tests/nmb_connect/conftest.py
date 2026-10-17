@@ -224,5 +224,5 @@ def settings(tmp_path: Path) -> Settings:
         kill_switch_file=tmp_path / "STOP", state_db=tmp_path / "nmb_connect.sqlite", reply_staff_id=AGENT_STAFF,
         close_status_id=3, metabase_host="http://mb.test", metabase_api_key="k", recheck_after_hours=24.0,
         max_info_requests=2, attachment_mode="local", portal_users_file=tmp_path / "users.json",
-        reg_failures_db_name="registration_failures",
+        reg_failures_db_name="registration_failures", reg_customer_table="customer",
     )

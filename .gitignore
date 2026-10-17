@@ -10,3 +10,5 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 preview*.html
+portal-ui/node_modules/
+portal-ui/dist/

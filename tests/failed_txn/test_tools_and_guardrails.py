@@ -73,10 +73,10 @@ def test_confirming_a_failed_transaction_checks_core_banking(mb):
     tid = found["transactions"][0]["id"]
     out = run(box, "confirm_transaction", {"transaction_id": tid}, pseudo, ev, t)
     assert out["where_this_leaves_the_client"] == "failed_no_debit" and out["core_banking"]["debited"] == "no"
-    assert out["standard_outcome"]["action"] == "reply_and_close" and out["amount_matches_ticket"] == "yes"
+    assert out["suggested_outcome"]["action"] == "reply_and_close" and out["amount_matches_ticket"] == "yes"
     mb.add_posting(20, "D", "NMBCONNECT ZIPIT", day)
     out = run(box, "confirm_transaction", {"transaction_id": tid}, pseudo, ev, t)
-    assert out["where_this_leaves_the_client"] == "failed" and out["standard_outcome"]["action"] == "escalate"
+    assert out["where_this_leaves_the_client"] == "failed" and out["suggested_outcome"]["action"] == "escalate"
     mb.add_posting(20, "C", "REVERSAL NMBCONNECT ZIPIT", day + timedelta(hours=5))
     out = run(box, "confirm_transaction", {"transaction_id": tid}, pseudo, ev, t)
     assert out["where_this_leaves_the_client"] == "failed_refunded"
@@ -128,7 +128,7 @@ def test_a_close_needs_a_confirmed_transaction(mb):
     t, pseudo = ticket(), Pseudonymizer()
     ev = setup(mb, pseudo, t)
     g = guarded(mb, t, ev, pseudo)
-    assert g.final.action == "escalate" and "no transaction was confirmed" in g.notes[0]
+    assert g.final.action == "escalate" and "no transaction or EcoCash link was confirmed" in g.notes[0]
 
 
 def test_a_declined_transaction_may_close(mb):
@@ -154,10 +154,11 @@ def test_the_reply_must_say_what_the_evidence_says(mb):
     assert g.final.action == "escalate" and "went through" in g.notes[0]
 
 
-def test_the_amount_on_the_ticket_must_match(mb):
+def test_another_amount_than_the_tickets_needs_core_banking_to_show_no_debit_of_it(mb):
+    mb.add_posting(35, "D", "ZIPIT TO OTHER BANK")
     t, ev, pseudo = confirmed(mb, rsp="51", text="Client acc 86000013101001 ZIPIT of USD 35 failed")
     g = guarded(mb, t, ev, pseudo)
-    assert g.final.action == "escalate" and "amount" in g.notes[0]
+    assert g.final.action == "escalate" and "not the amount on the ticket" in g.notes[0] and "35.00" in g.notes[0]
 
 
 def test_declined_but_debited_needs_a_person(mb):

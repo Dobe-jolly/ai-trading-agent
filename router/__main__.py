@@ -52,8 +52,6 @@ class RouterCli(DeskCli):
                            owners=desk_owners(), catch_alls=s.topics, never_to=s.never_to, move_to=s.move_to)
 
     def build_runner(self, s: Settings, mode: str, mb: MetabaseClient, audit: AuditLog):
-        import anthropic
-
         from agentcore.writer import OsTicketWriter, ShadowWriter
         from .loop import TicketAgent
         from .runner import Router
@@ -62,7 +60,9 @@ class RouterCli(DeskCli):
         store = self.build_store(s, mb)
         catalogue = self.build_catalogue(s, mb, store)
         toolbox = Toolbox(store, catalogue, s.examples_days)
-        client = anthropic.Anthropic(api_key=s.anthropic_api_key, max_retries=3)
+        from agentcore.sdk_backend import build_client
+
+        client = build_client(s, 3)
         prompt = self.load_prompt(s, TOPICS=catalogue.prompt_list(), CATCH_ALLS=", ".join(s.topics) or "none",
                                   MAX_INFO_REQUESTS=s.max_info_requests)
         agent = TicketAgent(client, model=s.model, system_prompt=prompt, toolbox=toolbox,

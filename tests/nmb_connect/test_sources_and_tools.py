@@ -143,8 +143,8 @@ def test_otp_registered_with_the_right_number_gets_the_handset_steps(mb):
     mb.add_sms("otp")
     out, s = assess(mb, OTP_TICKET, "otp_not_received", lookups=("profile", "sms"))
     assert out["where_the_client_stands"] == "registered"
-    assert out["standard_outcome"]["action"] == "reply_and_close"
-    reply = s.pseudo.unmask(out["standard_outcome"]["reply"])
+    assert out["suggested_outcome"]["action"] == "reply_and_close"
+    reply = s.pseudo.unmask(out["suggested_outcome"]["reply"])
     assert "blocked or spam SMS folder" in reply and "the last OTP was delivered on" in reply
 
 
@@ -158,28 +158,28 @@ def test_otp_failing_at_the_gateway_needs_a_person(mb):
 def test_otp_to_another_number_keeps_the_ticket_open(mb):
     mb.add_profile(mobile=NEW_MOBILE)
     out, s = assess(mb, OTP_TICKET, "otp_not_received", lookups=("profile", "core"))
-    assert out["where_the_client_stands"] == "mobile_mismatch" and out["standard_outcome"]["action"] == "request_info"
-    reply = s.pseudo.unmask(out["standard_outcome"]["reply"])
+    assert out["where_the_client_stands"] == "mobile_mismatch" and out["suggested_outcome"]["action"] == "request_info"
+    reply = s.pseudo.unmask(out["suggested_outcome"]["reply"])
     assert NEW_MOBILE in reply and "ICT Data Science" in reply and "core banking already shows 0771234567" in reply
 
 
 def test_not_registered_is_closed_with_the_registration_advice(mb):
     out, _ = assess(mb, OTP_TICKET, "otp_not_received")
-    assert out["where_the_client_stands"] == "not_registered" and out["standard_outcome"]["action"] == "reply_and_close"
-    assert "07…, 7… or 263…" in out["standard_outcome"]["reply"]
+    assert out["where_the_client_stands"] == "not_registered" and out["suggested_outcome"]["action"] == "reply_and_close"
+    assert "07…, 7… or 263…" in out["suggested_outcome"]["reply"]
 
 
 def test_already_registered_asks_the_branch_to_delete_then_confirms_the_new_profile(mb):
     old = mb.add_profile(created=now_local() - timedelta(days=300))
     text = f"CIF {CIF} cell {MOBILE}: 'Already registered, kindly log in' but cannot log in"
     out, _ = assess(mb, text, "cannot_register", topic="NMB Connect / Registration")
-    assert out["where_the_client_stands"] == "already_registered" and out["standard_outcome"]["action"] == "request_info"
-    assert "delete the profile on the dashboard" in out["standard_outcome"]["reply"]
+    assert out["where_the_client_stands"] == "already_registered" and out["suggested_outcome"]["action"] == "request_info"
+    assert "delete the profile on the dashboard" in out["suggested_outcome"]["reply"]
     mb.profiles.remove(old)
     mb.add_profile(created=now_local() - timedelta(minutes=30))  # the client registered again
     mb.tickets.clear()
     out, _ = assess(mb, text, "cannot_register", topic="NMB Connect / Registration")
-    assert out["where_the_client_stands"] == "reregistered" and out["standard_outcome"]["action"] == "reply_and_close"
+    assert out["where_the_client_stands"] == "reregistered" and out["suggested_outcome"]["action"] == "reply_and_close"
 
 
 @pytest.mark.parametrize("root,status,action", [
@@ -192,26 +192,26 @@ def test_failed_registrations_by_reason(mb, root, status, action):
     mb.add_failure(root)
     text = f"CIF {CIF} cell {MOBILE}: registration fails with an error"
     out, s = assess(mb, text, "cannot_register", lookups=("profile", "core", "failures"), topic="NMB Connect / Registration")
-    assert out["where_the_client_stands"] == status and out["standard_outcome"]["action"] == action
+    assert out["where_the_client_stands"] == status and out["suggested_outcome"]["action"] == action
     if status == "registration_failed_email":
-        assert "client@example.com" in s.pseudo.unmask(out["standard_outcome"]["reply"])
+        assert "client@example.com" in s.pseudo.unmask(out["suggested_outcome"]["reply"])
 
 
 def test_no_profile_and_no_failure_asks_for_the_screenshot(mb):
     text = f"CIF {CIF} cell {MOBILE}: registration fails"
     out, _ = assess(mb, text, "cannot_register", lookups=("profile", "failures"), topic="NMB Connect / Registration")
-    assert out["where_the_client_stands"] == "no_attempt_found" and "screenshot" in out["standard_outcome"]["reply"]
+    assert out["where_the_client_stands"] == "no_attempt_found" and "screenshot" in out["suggested_outcome"]["reply"]
 
 
 def test_accounts_not_visible(mb):
     mb.add_profile()
     text = f"CIF {CIF} cell {MOBILE}: ZiG account {ZIG_ACCOUNT} not showing on the app"
     out, s = assess(mb, text, "accounts_not_visible", topic="NMB Connect / Account", account_number=ZIG_ACCOUNT)
-    assert out["where_the_client_stands"] == "account_active" and out["standard_outcome"]["action"] == "request_info"
+    assert out["where_the_client_stands"] == "account_active" and out["suggested_outcome"]["action"] == "request_info"
     mb.core[ZIG_ACCOUNT]["dormant"] = "1"
     mb.tickets.clear()
     out, s = assess(mb, text, "accounts_not_visible", topic="NMB Connect / Account", account_number=ZIG_ACCOUNT)
-    assert out["where_the_client_stands"] == "account_inactive" and "dormant" in out["standard_outcome"]["reply"]
+    assert out["where_the_client_stands"] == "account_inactive" and "dormant" in out["suggested_outcome"]["reply"]
     mb.core[ZIG_ACCOUNT].update(dormant="0", cif=OTHER_CIF)
     mb.tickets.clear()
     out, _ = assess(mb, text, "accounts_not_visible", topic="NMB Connect / Account", account_number=ZIG_ACCOUNT)
@@ -250,3 +250,13 @@ def test_assessing_before_looking_up_is_refused(mb):
     s = Session(mb, ticket(mb, OTP_TICKET))
     assert "get_connect_profile" in s.run("assess_access_issue", problem="otp_not_received")
     assert s.run("assess_access_issue", problem="block_service")["where_the_client_stands"] == "how_to"
+
+
+def test_a_cif_written_as_a_sentence_counts_as_given_on_the_ticket():
+    """Seen in the audit (#627867): "CIF is 191565" was not picked up, so the lookups with it were refused."""
+    from nmb_connect.osticket import find_details
+
+    for text, cif in (("Good day, CIF is 191565, client fails to register", "191565"),
+                      ("customer number is 2345678", "2345678"), ("cif was 765432", "765432")):
+        assert find_details(text).cifs == {cif}
+    assert find_details("CIF issue 1234 on login").cifs == set()

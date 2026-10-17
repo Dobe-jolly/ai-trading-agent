@@ -1,0 +1,814 @@
+{
+  "about": "Approved tables for query_data, the agents' general read-only look into the bank's databases. Only what is listed here can be read: no personal columns (names, ID numbers, e-mails, addresses, card numbers, PINs, OTPs) and no free-text request/response bodies. 'identifiers' are the columns a query may be matched on, with the kind of value the ticket must give (account, mobile, reference, cif); 'time' is the column a query's window applies to; 'columns' are the columns that may be shown, filtered or counted. 'open' tables hold no client data and may be read without a match. Built from reports/catalogue (tools/metabase_names.py --catalogue).",
+  "sources": {
+    "zipit_middleware": {
+      "database": "Postilion Billers",
+      "table": "public.zipit",
+      "desks": [
+        "failed_txn"
+      ],
+      "about": "ZIPIT transfers to other banks as the payments middleware logged them (NMB Connect, USSD, internet banking): the debit, the switch response and the error. debit_account_error is core banking's error on the debit; postilion_resp_code is the switch's response.",
+      "time": {
+        "column": "date_created",
+        "type": "timestamp",
+        "max_days": 31
+      },
+      "order_by": "date_created",
+      "identifiers": {
+        "source_account": "account",
+        "debited_account": "account",
+        "destination_account": "account",
+        "rrn": "reference",
+        "reference": "reference",
+        "nmb_reference": "reference",
+        "customer_reference": "reference"
+      },
+      "columns": [
+        "date_created",
+        "transaction_date",
+        "amount",
+        "currency",
+        "channel",
+        "operation",
+        "status",
+        "error_code",
+        "debit_account_error",
+        "postilion_resp_code",
+        "postilion_resp_msg_type",
+        "receiver_bank",
+        "destination_bank_bin",
+        "source_account",
+        "debited_account",
+        "destination_account",
+        "rrn",
+        "reference",
+        "nmb_reference",
+        "customer_reference"
+      ]
+    },
+    "internal_transfer_middleware": {
+      "database": "Postilion Billers",
+      "table": "public.internal_transfer",
+      "desks": [
+        "failed_txn"
+      ],
+      "about": "Transfers between NMB accounts (and tap-card transfers) as the payments middleware logged them, with status and error code.",
+      "time": {
+        "column": "date_created",
+        "type": "timestamp",
+        "max_days": 31
+      },
+      "order_by": "date_created",
+      "identifiers": {
+        "source_account": "account",
+        "destination_account": "account",
+        "rrn": "reference",
+        "reference": "reference",
+        "nmb_reference": "reference",
+        "customer_reference": "reference"
+      },
+      "columns": [
+        "date_created",
+        "transaction_date",
+        "amount",
+        "currency",
+        "channel",
+        "transfer_type",
+        "status",
+        "error_code",
+        "source_account",
+        "destination_account",
+        "rrn",
+        "reference",
+        "nmb_reference",
+        "customer_reference"
+      ]
+    },
+    "rtgs_middleware": {
+      "database": "Postilion Billers",
+      "table": "public.rtgs",
+      "desks": [
+        "failed_txn"
+      ],
+      "about": "RTGS transfers from the digital channels as the payments middleware logged them: status, the reason when it failed, and the T24 FT reference.",
+      "time": {
+        "column": "date_created",
+        "type": "timestamp",
+        "max_days": 31
+      },
+      "order_by": "date_created",
+      "identifiers": {
+        "debit_account_number": "account",
+        "credit_account_number": "account",
+        "beneficiary_account_number": "account",
+        "reference": "reference",
+        "debit_reference": "reference",
+        "t24ftid": "reference"
+      },
+      "columns": [
+        "date_created",
+        "transaction_date",
+        "amount",
+        "currency",
+        "bank",
+        "channel",
+        "status",
+        "reason",
+        "debit_value_date",
+        "credit_value_date",
+        "debit_account_number",
+        "credit_account_number",
+        "beneficiary_account_number",
+        "reference",
+        "debit_reference",
+        "t24ftid"
+      ]
+    },
+    "zimra_payments": {
+      "database": "Postilion Billers",
+      "table": "public.zimra",
+      "desks": [
+        "failed_txn"
+      ],
+      "about": "ZIMRA tax and customs payments (domestic and customs/port of entry): status and reason, the BP number and ZIMRA's own references.",
+      "time": {
+        "column": "date_created",
+        "type": "timestamp",
+        "max_days": 31
+      },
+      "order_by": "date_created",
+      "identifiers": {
+        "source_account": "account",
+        "target_account": "account",
+        "business_partner_number": "reference",
+        "reference": "reference",
+        "beneficiary_reference": "reference",
+        "req_id": "reference",
+        "request_id": "reference",
+        "zimra_internal_id": "reference"
+      },
+      "columns": [
+        "date_created",
+        "transaction_date",
+        "amount",
+        "currency",
+        "channel",
+        "last_updated_channel",
+        "type",
+        "status",
+        "reason",
+        "customer_number",
+        "business_partner_number",
+        "source_account",
+        "target_account",
+        "reference",
+        "beneficiary_reference",
+        "req_id",
+        "request_id",
+        "zimra_internal_id"
+      ]
+    },
+    "econet_airtime": {
+      "database": "BILLERS",
+      "table": "public.econet_payment",
+      "desks": [
+        "failed_txn"
+      ],
+      "about": "Econet airtime and bundle purchases from the bank's channels: status, error code and reason from Econet, and the vendor reference.",
+      "time": {
+        "column": "date_created",
+        "type": "timestamp",
+        "max_days": 7
+      },
+      "order_by": "date_created",
+      "identifiers": {
+        "source_account": "account",
+        "mobile_number": "mobile",
+        "reference": "reference",
+        "customer_reference": "reference",
+        "vendor_reference": "reference",
+        "trans_no": "reference"
+      },
+      "columns": [
+        "date_created",
+        "transaction_date",
+        "amount",
+        "source_currency",
+        "channel",
+        "product_code",
+        "provider",
+        "quantity",
+        "status",
+        "error_code",
+        "reason",
+        "source_account",
+        "mobile_number",
+        "reference",
+        "customer_reference",
+        "vendor_reference",
+        "trans_no"
+      ]
+    },
+    "netone_airtime": {
+      "database": "BILLERS",
+      "table": "public.netone_payment",
+      "desks": [
+        "failed_txn"
+      ],
+      "about": "NetOne airtime and bundle purchases from the bank's channels: status, error code and reason.",
+      "time": {
+        "column": "date_created",
+        "type": "timestamp",
+        "max_days": 7
+      },
+      "order_by": "date_created",
+      "identifiers": {
+        "source_account": "account",
+        "mobile_number": "mobile",
+        "reference": "reference",
+        "customer_reference": "reference",
+        "vendor_reference": "reference",
+        "trans_no": "reference"
+      },
+      "columns": [
+        "date_created",
+        "transaction_date",
+        "amount",
+        "source_currency",
+        "channel",
+        "product_code",
+        "quantity",
+        "status",
+        "error_code",
+        "reason",
+        "source_account",
+        "mobile_number",
+        "reference",
+        "customer_reference",
+        "vendor_reference",
+        "trans_no"
+      ]
+    },
+    "zesa_tokens": {
+      "database": "BILLERS",
+      "table": "public.esol_zesa_payment",
+      "desks": [
+        "failed_txn"
+      ],
+      "about": "ZESA prepaid electricity purchases: status, ZESA's response code and reason, the receipt number, and whether a token was issued (token_issued; the token itself is not shown).",
+      "time": {
+        "column": "date_created",
+        "type": "timestamp",
+        "max_days": 31
+      },
+      "order_by": "date_created",
+      "identifiers": {
+        "source_account": "account",
+        "utility_account": "account",
+        "account_number": "account",
+        "target_mobile": "mobile",
+        "reference": "reference",
+        "transaction_reference": "reference",
+        "vendor_reference": "reference",
+        "receipt_number": "reference",
+        "original_reference": "reference"
+      },
+      "columns": [
+        "date_created",
+        "transaction_amount",
+        "currency_code",
+        "payment_currency",
+        "meter_currency",
+        "channel",
+        "status",
+        "response_code",
+        "reason",
+        "product_name",
+        "sub_product_name",
+        "payment_type",
+        "retry_count",
+        "zesa_provider",
+        "aggregator",
+        "source_account",
+        "utility_account",
+        "account_number",
+        "target_mobile",
+        "reference",
+        "transaction_reference",
+        "vendor_reference",
+        "receipt_number",
+        "original_reference"
+      ],
+      "computed": {
+        "token_issued": "CASE WHEN COALESCE(token, '') <> '' THEN 'yes' ELSE 'no' END"
+      }
+    },
+    "intellect_api_errors": {
+      "database": "intellect_errors",
+      "table": "public.error_log",
+      "desks": [
+        "failed_txn"
+      ],
+      "about": "Errors the channels' core banking (Intellect) interface logged: the operation, error code and message, category and severity, for transfers, payments and loans from the digital channels and branches.",
+      "time": {
+        "column": "received_at",
+        "type": "timestamp",
+        "max_days": 31
+      },
+      "order_by": "received_at",
+      "identifiers": {
+        "account_number": "account",
+        "debtor_account": "account",
+        "creditor_account": "account",
+        "customer_id": "cif",
+        "reference_number": "reference",
+        "request_id": "reference",
+        "correlation_id": "reference"
+      },
+      "columns": [
+        "received_at",
+        "transaction_date",
+        "transaction_time",
+        "amount",
+        "currency",
+        "channel",
+        "operation",
+        "business_operation",
+        "transaction_type",
+        "status",
+        "status_code",
+        "error_code",
+        "error_message",
+        "error_category",
+        "error_type",
+        "error_severity",
+        "reason",
+        "message",
+        "service_name",
+        "is_retryable",
+        "account_number",
+        "debtor_account",
+        "creditor_account",
+        "customer_id",
+        "reference_number",
+        "request_id",
+        "correlation_id"
+      ]
+    },
+    "ecocash_registration_failures": {
+      "database": "Ecocash erros",
+      "table": "public.failed_ecocash_registrations",
+      "desks": [
+        "failed_txn"
+      ],
+      "about": "EcoCash link (registration) attempts that failed, with EcoCash's or the bank's error message, per account, mobile and currency.",
+      "time": {
+        "column": "failure_timestamp",
+        "type": "timestamp",
+        "max_days": 90
+      },
+      "order_by": "failure_timestamp",
+      "identifiers": {
+        "account_number": "account",
+        "mobile_number": "mobile"
+      },
+      "columns": [
+        "failure_timestamp",
+        "created_at",
+        "currency",
+        "error_message",
+        "account_number",
+        "mobile_number"
+      ]
+    },
+    "ft_reversals": {
+      "database": "Batch Processing",
+      "table": "public.ftreversals",
+      "desks": [
+        "failed_txn"
+      ],
+      "about": "Funds-transfer reversals done in batches by Operations: the reference reversed, amount, reason and the batch's status.",
+      "order_by": "id",
+      "identifiers": {
+        "reference": "reference",
+        "batchreference": "reference"
+      },
+      "columns": [
+        "reference",
+        "batchreference",
+        "amount",
+        "reason",
+        "type",
+        "batchstatus",
+        "processingdate",
+        "authoriserdate",
+        "sequence",
+        "validate"
+      ]
+    },
+    "card_requests": {
+      "database": "CARD ISSUANCE",
+      "table": "public.card_request",
+      "desks": [
+        "failed_txn"
+      ],
+      "about": "Card requests at the branches: new, replacement and duplicate cards, with the card type, operation, issue type and status. Card numbers are not shown.",
+      "order_by": "id",
+      "identifiers": {
+        "account_number": "account",
+        "cif": "cif",
+        "reference": "reference"
+      },
+      "columns": [
+        "date_created",
+        "allocation_date",
+        "card_type",
+        "card_operation",
+        "card_option",
+        "issue_type",
+        "card_program",
+        "category",
+        "currency",
+        "status",
+        "branch",
+        "reference",
+        "account_number",
+        "cif"
+      ]
+    },
+    "channel_limits_by_category": {
+      "database": "connectorservices",
+      "table": "public.limits_by_categ",
+      "desks": [
+        "failed_txn"
+      ],
+      "open": true,
+      "about": "The channel transaction limits set per account category (no client data).",
+      "order_by": "id",
+      "identifiers": {},
+      "columns": [
+        "category",
+        "limit_amount",
+        "status",
+        "date_created",
+        "time_created"
+      ]
+    },
+    "sms_dispatch_messages": {
+      "database": "SMS",
+      "table": "public.sms_message",
+      "desks": [
+        "sms_alerts"
+      ],
+      "about": "Every SMS the bank's SMS dispatch service sent or tried to send (alerts, OTPs): dispatch status, the provider and its references, and the failure reason. Matched by the recipient's mobile. The message text is not shown.",
+      "time": {
+        "column": "created_at",
+        "type": "timestamp",
+        "max_days": 14
+      },
+      "order_by": "created_at",
+      "identifiers": {
+        "recipient_mobile": "mobile",
+        "provider_message_id": "reference",
+        "provider_reference": "reference"
+      },
+      "via": {
+        "recipient_mobile": {
+          "column": "recipient_id",
+          "table": "public.sms_recipient",
+          "key": "id",
+          "lookup": "mobile_number"
+        }
+      },
+      "columns": [
+        "created_at",
+        "dispatched_at",
+        "updated_at",
+        "channel",
+        "operation",
+        "dispatch_status",
+        "failure_reason",
+        "provider_name",
+        "provider_message_id",
+        "provider_reference",
+        "request_key",
+        "source_request_key"
+      ]
+    },
+    "sms_recipients": {
+      "database": "SMS",
+      "table": "public.sms_recipient",
+      "desks": [
+        "sms_alerts"
+      ],
+      "about": "The SMS dispatch service's recipients: whether SMS is enabled for the mobile, and when it was added or changed.",
+      "order_by": "id",
+      "identifiers": {
+        "mobile_number": "mobile"
+      },
+      "columns": [
+        "mobile_number",
+        "sms_enabled",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    "connect_profiles": {
+      "database": "CONECT 2.0 REG",
+      "table": "public.customers",
+      "desks": [
+        "nmb_connect"
+      ],
+      "about": "NMB Connect profiles: status and active flag, the channel and source of registration, when registered and changed, the KYC document statuses, notification settings and preferred contact. No names, ID, e-mail, address or device details.",
+      "order_by": "id",
+      "identifiers": {
+        "customer_number": "cif",
+        "mobile_number": "mobile"
+      },
+      "columns": [
+        "customer_number",
+        "mobile_number",
+        "status",
+        "active",
+        "channel",
+        "source_reg",
+        "registration_date",
+        "date_created",
+        "date_modified",
+        "last_update_date",
+        "daily_update_count",
+        "preferred_contact",
+        "kyc_proof_of_residence_status",
+        "kyc_proof_of_employment_status",
+        "kyc_id_front_status",
+        "kyc_id_back_status",
+        "kyc_selfie_status",
+        "sms_notifications_enabled",
+        "in_app_notifications_enabled"
+      ]
+    },
+    "connect_channel_enrollments": {
+      "database": "CONECT 2.0 REG",
+      "table": "public.channel_enrollments",
+      "desks": [
+        "nmb_connect"
+      ],
+      "about": "Which channels (app, USSD, web) an NMB Connect profile is enrolled on, the status, whether a first login is still required, and when it was activated.",
+      "order_by": "date_created",
+      "identifiers": {
+        "customer_mobile": "mobile",
+        "customer_cif": "cif"
+      },
+      "via": {
+        "customer_mobile": {
+          "column": "customer_id",
+          "table": "public.customers",
+          "key": "id",
+          "lookup": "mobile_number"
+        },
+        "customer_cif": {
+          "column": "customer_id",
+          "table": "public.customers",
+          "key": "id",
+          "lookup": "customer_number"
+        }
+      },
+      "columns": [
+        "channel",
+        "status",
+        "first_login_required",
+        "activated_at",
+        "date_created",
+        "date_modified"
+      ]
+    },
+    "connect_user_channels": {
+      "database": "CONECT 2.0 REG",
+      "table": "public.user_channels",
+      "desks": [
+        "nmb_connect"
+      ],
+      "about": "The login per channel of an NMB Connect profile: active or not, failed login attempts, WhatsApp consent, when created and changed. No username or password.",
+      "order_by": "date_modified",
+      "identifiers": {
+        "customer_mobile": "mobile",
+        "customer_cif": "cif"
+      },
+      "via": {
+        "customer_mobile": {
+          "column": "customer_id",
+          "table": "public.customers",
+          "key": "id",
+          "lookup": "mobile_number"
+        },
+        "customer_cif": {
+          "column": "customer_id",
+          "table": "public.customers",
+          "key": "id",
+          "lookup": "customer_number"
+        }
+      },
+      "columns": [
+        "channel",
+        "active",
+        "login_attempts",
+        "has_whats_app_consent",
+        "date_created",
+        "date_modified"
+      ]
+    },
+    "connect_credential_status": {
+      "database": "CONECT 2.0 REG",
+      "table": "public.credential_status",
+      "desks": [
+        "nmb_connect"
+      ],
+      "about": "Credentials enabled or disabled on an NMB Connect profile per channel (PIN, password, biometrics...), with the reason and when. The credential itself is never shown.",
+      "order_by": "updated_date",
+      "identifiers": {
+        "customer_mobile": "mobile",
+        "customer_cif": "cif"
+      },
+      "via": {
+        "customer_mobile": {
+          "column": "customer_id",
+          "table": "public.customers",
+          "key": "id",
+          "lookup": "mobile_number"
+        },
+        "customer_cif": {
+          "column": "customer_id",
+          "table": "public.customers",
+          "key": "id",
+          "lookup": "customer_number"
+        }
+      },
+      "columns": [
+        "channel",
+        "credential_type",
+        "is_enabled",
+        "reason",
+        "created_date",
+        "updated_date"
+      ]
+    },
+    "connect_activity_history": {
+      "database": "CONECT 2.0 REG",
+      "table": "public.history",
+      "desks": [
+        "nmb_connect"
+      ],
+      "about": "NMB Connect profile activity: logins, registrations, resets and changes, with the channel, status and error message.",
+      "time": {
+        "column": "date_created",
+        "type": "timestamp",
+        "max_days": 31
+      },
+      "order_by": "date_created",
+      "identifiers": {
+        "mobile_number": "mobile",
+        "customer_mobile": "mobile",
+        "customer_cif": "cif"
+      },
+      "via": {
+        "customer_mobile": {
+          "column": "customer_id",
+          "table": "public.customers",
+          "key": "id",
+          "lookup": "mobile_number"
+        },
+        "customer_cif": {
+          "column": "customer_id",
+          "table": "public.customers",
+          "key": "id",
+          "lookup": "customer_number"
+        }
+      },
+      "columns": [
+        "date_created",
+        "activity",
+        "activity_type",
+        "channel",
+        "status",
+        "error_message",
+        "mobile_number"
+      ]
+    },
+    "connect_account_linking_retries": {
+      "database": "CONECT 2.0 REG",
+      "table": "public.account_linking_retry",
+      "desks": [
+        "nmb_connect"
+      ],
+      "about": "Retries of linking a profile's bank accounts to NMB Connect: how many, the status, the error, and when the next retry is due.",
+      "order_by": "created_date",
+      "identifiers": {
+        "customer_mobile": "mobile",
+        "customer_cif": "cif"
+      },
+      "via": {
+        "customer_mobile": {
+          "column": "customer_id",
+          "table": "public.customers",
+          "key": "id",
+          "lookup": "mobile_number"
+        },
+        "customer_cif": {
+          "column": "customer_id",
+          "table": "public.customers",
+          "key": "id",
+          "lookup": "customer_number"
+        }
+      },
+      "columns": [
+        "status",
+        "retry_count",
+        "max_retries",
+        "error_message",
+        "last_retry_date",
+        "next_retry_date",
+        "created_date",
+        "updated_date"
+      ]
+    },
+    "connect_linked_cards": {
+      "database": "CONECT 2.0 REG",
+      "table": "public.linked_card",
+      "desks": [
+        "nmb_connect"
+      ],
+      "about": "Cards linked to an NMB Connect profile: type, bank, currency, category, whether active, and the card gateway's tokenisation result. No card numbers.",
+      "order_by": "date_created",
+      "identifiers": {
+        "customer_number": "cif",
+        "customer_mobile": "mobile"
+      },
+      "via": {
+        "customer_mobile": {
+          "column": "customer_id",
+          "table": "public.customers",
+          "key": "id",
+          "lookup": "mobile_number"
+        }
+      },
+      "columns": [
+        "customer_number",
+        "card_type",
+        "bank_name",
+        "currency",
+        "category",
+        "category_description",
+        "active",
+        "date_created",
+        "date_modified",
+        "oppwa_token_status",
+        "oppwa_result_description"
+      ]
+    },
+    "connect_fraud_alerts": {
+      "database": "CONECT 2.0 REG",
+      "table": "public.fraud_alerts",
+      "desks": [
+        "nmb_connect"
+      ],
+      "about": "NMB Connect fraud alerts on a profile or mobile: type, severity, risk score, channel and activity, and whether and when it was resolved (which can explain a blocked profile). No alert details or device data.",
+      "time": {
+        "column": "created_at",
+        "type": "timestamp",
+        "max_days": 90
+      },
+      "order_by": "created_at",
+      "identifiers": {
+        "mobile_number": "mobile",
+        "customer_mobile": "mobile",
+        "customer_cif": "cif"
+      },
+      "via": {
+        "customer_mobile": {
+          "column": "customer_id",
+          "table": "public.customers",
+          "key": "id",
+          "lookup": "mobile_number"
+        },
+        "customer_cif": {
+          "column": "customer_id",
+          "table": "public.customers",
+          "key": "id",
+          "lookup": "customer_number"
+        }
+      },
+      "columns": [
+        "created_at",
+        "alert_type",
+        "severity",
+        "risk_score",
+        "channel",
+        "activity",
+        "status",
+        "is_resolved",
+        "resolved_at",
+        "mobile_number"
+      ]
+    }
+  }
+}

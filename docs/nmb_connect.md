@@ -142,3 +142,25 @@ python -m nmbz audit --desk nmb_connect --since 2026-09-01  # replay closed NMB 
 
 The router moves tickets to these topics on its own once this desk is on (it works them), so tickets filed under
 HelpDesk / Logging Ticket that are really NMB Connect problems reach this desk in the same pass.
+
+
+## query_data: tables beyond the lookups
+
+The agent can also read approved tables of the NMB Connect registration database (CONECT 2.0 REG) with `query_data`
+(`agentcore/dataquery.py`, catalogue `agentcore/data_catalogue.json`): profiles (status, KYC document statuses,
+notification settings), channel enrolments, logins per channel and failed attempts, credentials enabled or disabled
+and why, profile activity with error messages, account-linking retries, linked cards and fraud alerts. No names, ID
+numbers, e-mails, addresses, device data, usernames, passwords, credentials or card numbers are listed. Each query is
+matched on a CIF, account or mobile the ticket gives or an earlier lookup found to be the client's (tables keyed by
+the profile's internal id are reached through the profile table); another client's number is refused. At most 25
+rows, masked; counts without a match carry no numbers. `python -m nmbz check --desk nmb_connect` tries each table's
+columns without reading rows; `QUERY_DATA=false` switches it off.
+
+## Staff knowledge and suggested replies
+
+What the helpdesk taught this desk lives in staff notes (Teach the agent), not in the prompt or code:
+`nmb_connect/knowledge_seed.json` holds them, and `python -m nmbz knowledge-seed --desk nmb_connect` proposes the ones not in the
+console yet. An Admin switches each on; from then on staff can change or switch off any of them without a code change.
+The notes: deleting an old profile when registration says already registered, changing a number (IDCCOB, then ICT Data Science), OTP and Forgot Username steps, not registered, failed registrations by reason, duplicates and locked profiles, dormant, frozen or closed accounts, and blocking access.
+
+`assess_access_issue` still works out where the client stands from the lookups and gives a suggested outcome in the helpdesk's usual wording; the agent writes the reply that fits the ticket. The code keeps what protects the client: only the client's own CIF, account or mobile; a close only on an assessment whose status allows it; keep-open statuses stay open until the branch acts; and the reply may not say the client is not registered when a profile was found, or ask for a profile to be deleted unless the assessment allows it.

@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Optional
 
+from agentcore.dataquery import DataQuery, identifier_forms, run_tool
 from agentcore.metabase import MetabaseError
 from .normalize import (
     ALERT_DEBITS,
@@ -103,6 +104,7 @@ class Evidence:
     tools_used: list[str] = field(default_factory=list)
     lookups: list[dict[str, Any]] = field(default_factory=list)  # investigative lookups: name, masked args, summary
     refused: list[str] = field(default_factory=list)  # lookups asked for a number not on the ticket
+    queries: dict[str, dict[str, Any]] = field(default_factory=dict)  # query_data calls by query_id (Q1, Q2, ...)
 
     @property
     def statuses(self) -> dict[str, str]:
@@ -132,11 +134,12 @@ SCOPED_ARGS = ("account_number", "mobile")
 
 class Toolbox:
     def __init__(self, checks: SmsChecks, pipeline_trace_enabled: bool = True, as_of: Optional[date] = None,
-                 lookups: Optional[Lookups] = None) -> None:
+                 lookups: Optional[Lookups] = None, data: Optional[DataQuery] = None) -> None:
         self.checks = checks
         self.pipeline_trace_enabled = pipeline_trace_enabled
         self.as_of = as_of
         self.lookups = lookups
+        self.data = data if data is not None and data.sources else None
 
     def schemas(self) -> list[dict[str, Any]]:
         tools = [CHECK_ACCOUNT_TOOL]
@@ -144,6 +147,8 @@ class Toolbox:
             tools.append(TRACE_PIPELINE_TOOL)
         if self.lookups is not None:
             tools += self.lookups.schemas()
+        if self.data is not None:
+            tools.append(self.data.tool_schema())
         return tools
 
     def run(self, name: str, args: dict[str, Any], pseudo: Pseudonymizer, evidence: Evidence,
@@ -166,11 +171,24 @@ class Toolbox:
                             "earlier result (for example <NUMBER_1>).", True)
                 data = self.lookups.run(name, pseudo.unmask_obj(args))
                 evidence.lookups.append({"tool": name, "args": dict(args), "summary": _lookup_summary(data)})
+            elif name == "query_data" and self.data is not None:
+                value = (args or {}).get("match_value")
+                if value not in (None, "") and not _known_token(value, pseudo):
+                    evidence.refused.append(str(value))
+                    return ("Refused: match_value must be a masked number exactly as it appears in the ticket or in an "
+                            "earlier result (for example <MOBILE_1>).", True)
+                data = run_tool(self.data, pseudo.unmask_obj(args or {}), _forms, evidence.queries, as_of=self.as_of)
+                data.pop("_no_follow_ups", None)  # counts carry no numbers (scrubbed), so no tokens to search with
+                evidence.lookups.append({"tool": name, "args": dict(args), "summary":
+                                         f"{data['source']}: {data['rows_shown']} row(s)"})
             else:
                 return f"Unknown tool {name!r}.", True
         except (ValueError, UnsafeValue) as exc:
             return f"Invalid input: {pseudo.mask(str(exc))}", True
         except MetabaseError as exc:
+            if name == "query_data":
+                return pseudo.mask(f"Query failed (data source error): {exc}. Check the columns and filters, or try "
+                                   "another source.")[:800], True
             return pseudo.mask(f"Check failed (data source error): {exc}. You may retry once.")[:800], True
         evidence.tools_used.append(name)
         text = json.dumps(pseudo.mask_obj(_redact(data)), default=str, ensure_ascii=False)
@@ -205,6 +223,14 @@ class Toolbox:
             raise ValueError("mobile is required")
         txn_date = parse_date(args.get("transaction_date")) if args.get("transaction_date") else None
         return self.checks.trace_pipeline(mobile, txn_date)
+
+
+def _forms(kind: str, raw: str) -> list:
+    """query_data: the forms of a value (already checked to be a token this ticket issued)."""
+    forms = identifier_forms(kind, raw)
+    if not forms:
+        raise ValueError(f"match_value is not a valid {kind}")
+    return forms
 
 
 def _known_token(value: Any, pseudo: Pseudonymizer) -> bool:
