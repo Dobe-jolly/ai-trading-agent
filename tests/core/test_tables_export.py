@@ -40,7 +40,7 @@ class FakeMb:
         return [{"cur": k, "n": v} for k, v in self.counts.items()]
 
 
-def test_fetch_month_groups_by_currency_and_retries_a_short_download(monkeypatch):
+def test_fetch_month_keeps_date_order_and_retries_a_short_download(monkeypatch):
     src = et.Source("zimpost")
     row = lambda cur: [cur if c == "currency" else "x" for c in src.columns]  # noqa: E731
     calls = []
@@ -53,7 +53,7 @@ def test_fetch_month_groups_by_currency_and_retries_a_short_download(monkeypatch
 
     monkeypatch.setattr(et.ex, "stream_rows", stream)
     got = et.fetch_month(FakeMb({"USD": 1, "ZIG": 1}), 1, src, "2026-01-01", "2026-02-01", "t", sleep=lambda s: None)
-    assert len(calls) == 2 and sorted(got) == ["USD", "ZWG"]
+    assert len(calls) == 2 and [r[src.cur_at] for r in got] == ["USD", "ZIG"]
 
 
 def test_fetch_month_gives_up_when_counts_never_agree(monkeypatch):

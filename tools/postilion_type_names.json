@@ -1,0 +1,7 @@
+{
+  "about": "Names for transaction types the bank's own map (failed_txn/sources.py) does not name. Used by tools/export_post_tran_leg.py. 'tran_types' maps a tran_type code to a name (the bank's map still wins for an exact type + message type + source + sink match); 'message_types' adds or overrides an ISO 8583 message type name. Still unnamed in the 14 Oct 2026 sample: tran_type 39 (132 rows), 38 (44) and 37 (8). They show as 'Type NN (unnamed)' until named here; `export_post_tran_leg.py --relabel DIR` re-applies this file to finished files without touching the database.",
+  "tran_types": {
+    "32": "Zipit Validation"
+  },
+  "message_types": {}
+}

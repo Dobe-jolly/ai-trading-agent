@@ -1,6 +1,6 @@
 """Monthly TXT exports of the VBS, Zimpost and Agency Banking transaction tables, through Metabase.
 
-One tab-separated file per month and currency, e.g. vbs_2026-01_USD.txt. Columns are the ones in the schema catalogue
+One tab-separated file per month with every currency in it, e.g. vbs_2026-01.txt (the currency column tells them apart). Columns are the ones in the schema catalogue
 (personal columns are already left out of it). Every month is checked against the database's own count per currency; a
 failed or short download is retried from scratch, so a month is never half in a file. Finished files are not redone
 with --resume.
@@ -80,8 +80,8 @@ class Source:
 
 
 def fetch_month(mb, db_id: int, src: Source, lo: str, hi: str, label: str,
-                sleep=time.sleep) -> dict[str, list[list[str]]]:
-    """One month's rows by currency label, checked against the database's count."""
+                sleep=time.sleep) -> list[list[str]]:
+    """One month's rows in date order, checked against the database's count for each currency."""
     last: Exception | None = None
     for attempt in range(len(ex.RETRY_WAITS) + 1):
         try:
@@ -89,12 +89,15 @@ def fetch_month(mb, db_id: int, src: Source, lo: str, hi: str, label: str,
             for r in mb.query(db_id, src.count(lo, hi)):
                 k = currency_label(str(r.get("cur") or r.get("CUR")))
                 expected[k] = expected.get(k, 0) + int(r.get("n") or r.get("N"))
-            got: dict[str, list[list[str]]] = {}
+            rows: list[list[str]] = []
+            seen: dict[str, int] = {}
             for row in ex.stream_rows(mb, db_id, src.select(lo, hi), src.columns):
-                got.setdefault(currency_label(row[src.cur_at]), []).append(row)
-            if {k: len(v) for k, v in got.items()} != expected:
-                raise RuntimeError(f"downloaded { {k: len(v) for k, v in got.items()} }, the database counts {expected}")
-            return got
+                rows.append(row)
+                k = currency_label(row[src.cur_at])
+                seen[k] = seen.get(k, 0) + 1
+            if seen != expected:
+                raise RuntimeError(f"downloaded {seen}, the database counts {expected}")
+            return rows
         except Exception as exc:  # noqa: BLE001 - any failure of this month is retried, then reported with the month
             last = exc
             if attempt == len(ex.RETRY_WAITS):
@@ -125,24 +128,21 @@ def run_source(mb, name: str, out: Path, start: date, end: date, resume: bool) -
     failures = 0
     for month, lo, hi in month_windows(start, end):
         label = f"{name} {month}"
-        if resume and list(out.glob(f"{name}_{month}_*.txt")):
+        path = out / f"{name}_{month}.txt"
+        if resume and path.exists():
             print(f"{label}: already done, skipped", flush=True)
             continue
         t0 = time.time()
         try:
-            got = fetch_month(mb, db_id, src, lo, hi, label)
+            rows = fetch_month(mb, db_id, src, lo, hi, label)
         except RuntimeError as exc:
             print(f"FAILED {exc}", flush=True)
             failures += 1
             continue
-        lines = []
-        for cur, rows in sorted(got.items()):
-            path = out / f"{name}_{month}_{cur}.txt"
-            size = write_file(path, src.columns, rows)
-            lines.append(f"{path.name}\t{len(rows)}\t{size}\r\n")
+        size = write_file(path, src.columns, rows)
         with open(manifest, "a", encoding="utf-8", newline="") as fh:
-            fh.writelines(lines)
-        print(f"{label}: done in {time.time() - t0:.0f}s, " + ", ".join(f"{c} {len(r):,}" for c, r in sorted(got.items())), flush=True)
+            fh.write(f"{path.name}\t{len(rows)}\t{size}\r\n")
+        print(f"{label}: done in {time.time() - t0:.0f}s, {len(rows):,} rows", flush=True)
     return failures
 
 
