@@ -101,6 +101,39 @@ def test_a_greeting_or_thanks_that_carries_the_request_is_kept(line):
     assert CaseMasker().mask(line) == line
 
 
+# ---- names nobody listed, after a cue -------------------------------------------------------------------
+@pytest.mark.parametrize("text,expected", [
+    ("Client Tendai Moyo did a ZIPIT.", "Client [CUSTOMER] did a ZIPIT."),
+    ("Mr. MOYO called the branch.", "Mr. [CUSTOMER] called the branch."),
+    ("account holder: Rudo Banda Account 1234567890", "account holder: [CUSTOMER] Account [NUMBER]"),
+    ("Customer Moyo's account was debited.", "Customer [CUSTOMER]'s account was debited."),
+    ("the name is Farai.", "the name is [CUSTOMER]."),
+    ("Dear Sir, client Gift Banda Complains of a debit", "Dear Sir, client [CUSTOMER] Complains of a debit"),
+])
+def test_a_name_after_a_cue_is_masked(text, expected):
+    assert CaseMasker().mask(text) == expected
+
+
+def test_a_name_found_after_a_cue_is_masked_everywhere_after():
+    masker = CaseMasker()
+    assert masker.mask("Tendai called. Client Tendai Moyo did a ZIPIT; Moyo says") == \
+        "[CUSTOMER] called. Client [CUSTOMER] did a ZIPIT; [CUSTOMER] says"
+    assert masker.mask("Reversed; TENDAI can retry. A gift card.") == "Reversed; [CUSTOMER] can retry. A gift card."
+
+
+@pytest.mark.parametrize("text", [
+    "Client Services escalated it.", "The client has no alerts.", "Client ZIPIT failed.", "Customer Care called back.",
+    "[CUSTOMER] is a client [CUSTOMER].", "the client tried again",
+])
+def test_ordinary_words_after_a_cue_stay(text):
+    assert CaseMasker().mask(text) == text
+
+
+def test_card_and_id_as_branches_write_them_are_masked():
+    out = CaseMasker().mask("Card 4000 1234 5678 9010 and ID 63-1234567 were given.")
+    assert out == "Card [NUMBER] and ID [NATIONAL_ID] were given."
+
+
 def test_empty_text():
     assert CaseMasker().mask(None) == ""
     assert CaseMasker().mask("") == ""

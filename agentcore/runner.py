@@ -20,6 +20,9 @@ from .approval import ApprovalStore, token_map
 from .audit import AuditLog, is_stale
 from .decision import ESCALATE, NO_ACTION, REPLY_ACTIONS, REPLY_AND_CLOSE, REQUEST_INFO, Decision
 from .guardrails import GuardrailResult, reply_problems
+from .cases.store import CaseStore
+from .cases.guard import COPY_WORDS, copied_case
+from .cases.tools import CaseTools, cited_ids, seen_ids, shown_cases
 from .knowledge import DEFAULT_PROMPT_CHARS, Item, KnowledgeStore, KnowledgeTools, prompt_block, used_ids
 from .loop import AgentError, AgentResult
 from .metabase import MetabaseError
@@ -71,6 +74,11 @@ class DeskRunner:
     recommendation_marker = "AI agent recommendation (not posted to the ticket owner)."
     result_type: type = AgentResult
     audit_scope = "closed"                        # words for the replay log line
+
+    @property
+    def desk_name(self) -> str:
+        """The desk's package (failed_txn, sms_alerts, ...): its --desk name, its report and case-store name."""
+        return type(self).__module__.split(".")[0]
 
     def __init__(self, settings: Any, store: Any, agent: Any, toolbox: Any, writer: Any, audit: AuditLog,
                  mode: str, notifier: Optional[Any] = None, anomaly: Optional[Any] = None,
@@ -208,6 +216,7 @@ class DeskRunner:
         self.audit.live_start(summary.run_id)
         self.agent.on_step = self.audit.live_step
         self.load_knowledge()
+        self.load_cases()
         if self.anomaly is not None:
             self.agent.context = self.anomaly.context()
             if self.agent.context:
@@ -462,7 +471,8 @@ class DeskRunner:
         posted = self._posted_text(ticket, result, guard)
         why = None
         if guard.final.action in REPLY_ACTIONS and not guard.deferred and posted:
-            why = self.approval_reason(self.s.approval_mode, guard.final, self.standard_action(ticket, result))
+            why = self.case_copy_reason(ticket, result, posted) \
+                or self.approval_reason(self.s.approval_mode, guard.final, self.standard_action(ticket, result))
         if why and self.mode == "live":
             executed, error = ["awaiting approval"], None
         else:
@@ -609,14 +619,48 @@ class DeskRunner:
                      f" (left out, over the prompt budget: {', '.join(i.label for i in left_out)})" if left_out else "")
         return left_out
 
+    def load_cases(self, replay: bool = False) -> bool:
+        """Give the agent find_past_cases when the desk has CASES=on (docs/retrieval.md). A failure here never stops
+        a pass: the desk runs without past cases. Returns whether the lookup is on."""
+        if not hasattr(self.agent, "use_cases"):
+            return False
+        tools = None
+        if str(getattr(self.s, "cases", "off") or "off").lower() == "on":
+            try:
+                store = CaseStore(self.audit.db, self.desk_name)
+                tools = CaseTools(store, half_life_days=int(getattr(self.s, "cases_half_life_days", 90) or 90),
+                                  max_age_days=int(getattr(self.s, "cases_days", 365) or 365), replay=replay)
+            except Exception:  # noqa: BLE001
+                log.exception("Could not open the desk's past cases; running without them")
+        self.agent.use_cases(tools)
+        return tools is not None
+
+    def case_copy_reason(self, ticket: Any, result: AgentResult, posted: str) -> Optional[str]:
+        """Why a reply waits for a person whatever APPROVAL_MODE says: it repeats a long passage of a past case the
+        agent was shown (agentcore.cases.guard). The desk's standard reply for this ticket doesn't count."""
+        cases = shown_cases(result.transcript)
+        if not cases:
+            return None
+        template = self.template(ticket, result)
+        case_id = copied_case(result.pseudo.mask(posted), cases, [result.pseudo.mask(template) if template else None])
+        if case_id is None:
+            return None
+        return (f"the reply repeats {COPY_WORDS}+ words of past case C{case_id}; a person checks that it fits this "
+                "ticket")
+
     def trace_fields(self, result: AgentResult) -> dict[str, Any]:
-        """Which prompt and notes produced a decision, so it can be traced and a bad note switched off."""
+        """Which prompt, notes and past cases produced a decision, so it can be traced and a bad note switched off
+        or a bad case suppressed."""
         active = list(getattr(self.agent, "knowledge_ids", []) or [])
         decision = result.decision
+        texts = [decision.reason, *(decision.evidence or [])]
+        seen = seen_ids(result.transcript)
         return {
             "prompt_version": getattr(self.agent, "prompt_version", None),
             "knowledge_active": active,
-            "knowledge_used": used_ids(result.transcript, [decision.reason, *(decision.evidence or [])], active),
+            "knowledge_used": used_ids(result.transcript, texts, active),
+            "cases_seen": seen,
+            "cases_used": cited_ids(texts, seen),
         }
 
     # ---- did tickets the agent closed stay closed? ---------------------------------------------------
@@ -663,6 +707,7 @@ class DeskRunner:
     def audit_closed(self, since: date, limit: Optional[int], window_today: bool, out_dir: Path) -> Path:
         run_id = self.audit.start_run("audit", self.s.model)
         self.load_knowledge()
+        self.load_cases(replay=True)
         tickets = self.closed_tickets(since)[: limit or None]
         threads = self.store.thread_ids(tickets)
         log.info("Audit: %d %s ticket(s) closed on/after %s", len(tickets), self.audit_scope, since)
@@ -714,7 +759,7 @@ class DeskRunner:
         self.toolbox.as_of = None
         self.audit.finish_run(run_id, len(tickets), decided, errors)
         out_dir.mkdir(parents=True, exist_ok=True)
-        desk = type(self).__module__.split(".")[0]  # each desk's report has its own name (sms_alerts, failed_txn...)
+        desk = self.desk_name  # each desk's report has its own name (sms_alerts, failed_txn...)
         out = out_dir / f"closed_audit_{desk}_since_{since.isoformat()}.csv"
         with out.open("w", newline="", encoding="utf-8") as handle:
             fields = list(rows[0]) if rows else ["ticket_num"]

@@ -29,7 +29,7 @@ from . import desks as registry
 log = logging.getLogger("nmbz")
 SERVICE_COMMANDS = ("run", "check", "portal", "portal-user", "desks")
 DESK_COMMANDS = ("audit", "compare", "report", "anomalies", "attachments", "notify-test", "notify-retry",
-                 "knowledge-seed")
+                 "knowledge-seed", "cases")
 
 
 def _logging(verbose: bool) -> None:

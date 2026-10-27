@@ -16,12 +16,22 @@ from typing import Any
 # Order matters: more specific patterns run first.
 PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("EMAIL", re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")),
-    # Zimbabwe national ID, e.g. 63-123456A78 or 63123456 A 78
-    ("NATIONAL_ID", re.compile(r"(?<![\w-])\d{2}-?\s?\d{6,7}\s?[A-Za-z]\s?-?\d{2}(?![\w])")),
+    # Zimbabwe national ID, e.g. 63-123456A78 or 63123456 A 78, also after a label and a dash (ID-63-123456A78);
+    # never inside a longer dashed number (0012-63-...)
+    ("NATIONAL_ID", re.compile(r"(?<!\w)(?<!\d-)\d{2}-?\s?\d{6,7}\s?[A-Za-z]\s?-?\d{2}(?![\w])")),
+    # ... and as branches often write it, without the check letter: 63-1234567, 63-123456-78 (the dash after the
+    # district code is what tells it from other numbers)
+    ("NATIONAL_ID", re.compile(r"(?<!\w)(?<!\d-)\d{2}-\d{6,7}(?:-\d{2})?(?![\w-])")),
     # Zimbabwe mobiles: 0772123456, 0772 123 456, +263 77 212 3456, 263772123456
     ("MOBILE", re.compile(r"(?<![\d+])(?:\+?263|0)[\s-]?7\d(?:[\s-]?\d){7}(?!\d)")),
     # Account, card and other long numbers (8+ digits)
     ("NUMBER", re.compile(r"(?<!\d)\d{8,19}(?!\d)")),
+    # ... written in groups: cards as 4000 1234 5678 9010, accounts as 0012-3456-7890 or 0012-63-1234567 (three or
+    # more groups, the first of 3+ digits, 9+ digits in all; or two groups of 4+). Not an amount written in thousands
+    # (1 500 000, 125 000 000): the guardrails need amounts, and that is how amounts are written. Not a date
+    # (2026-10-26, followed by a time or not).
+    ("NUMBER", re.compile(r"(?<![\d-])(?!\d{1,3}(?: \d{3})+(?![\d-]|[ -]\d))(?!\d{4}-\d{2}-\d{2}(?!\d))"
+                          r"(?:(?=(?:\d[ -]?){9})\d{3,7}(?:[ -]\d{2,7}){2,6}|\d{4,10}[ -]\d{4,10})(?![\d-])")),
 ]
 TOKEN_RE = re.compile(r"<(?:EMAIL|NATIONAL_ID|MOBILE|NUMBER)_\d+>")
 
@@ -31,7 +41,8 @@ def _canonical(kind: str, value: str) -> str:
         return re.sub(r"\D", "", value)[-9:]  # same number in any format -> one token
     if kind in ("EMAIL", "NATIONAL_ID"):
         return re.sub(r"[\s-]", "", value).upper()
-    return value.lstrip("0") or "0"  # account 0001234567890 and 1234567890 are the same account
+    digits = re.sub(r"\D", "", value)  # 4000 1234 5678 9010 and 4000123456789010 are the same card
+    return digits.lstrip("0") or "0"  # account 0001234567890 and 1234567890 are the same account
 
 
 class Pseudonymizer:
@@ -46,7 +57,8 @@ class Pseudonymizer:
             self._counts[kind] = self._counts.get(kind, 0) + 1
             token = f"<{kind}_{self._counts[kind]}>"
             self._token_for[key] = token
-            self._value_for[token] = re.sub(r"\s", "", raw) if kind != "EMAIL" else raw
+            self._value_for[token] = (raw if kind == "EMAIL" else re.sub(r"[\s-]", "", raw) if kind == "NUMBER"
+                                      else re.sub(r"\s", "", raw))
         return self._token_for[key]
 
     def mask(self, text: str) -> str:

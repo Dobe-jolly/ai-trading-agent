@@ -13,7 +13,7 @@ from .loop import AgentResult
 from .normalize import format_timestamp
 from .osticket import ESCALATION_NOTE_MARKER, RECOMMENDATION_NOTE_MARKER, Ticket
 from .rules import rules_decide
-from .tools import standard_reply
+from .tools import decline_code, standard_reply
 
 log = logging.getLogger(__name__)
 
@@ -126,6 +126,7 @@ class Runner(DeskRunner):
         facts = None
         if txn is not None:
             facts = {"confirmed": {"source": txn.source, "channel": txn.channel, "status": ev.status,
+                                   "code": decline_code(txn) or None,
                                    "amount": str(txn.amount) if txn.amount is not None else None,
                                    "currency": txn.currency, "debited": (ev.debit or {}).get("debited"),
                                    "refunded": (ev.debit or {}).get("refunded"), "branch": ticket.org_name}}

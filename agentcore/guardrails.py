@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Optional
 
+from .cases.guard import placeholder_problem
 from .decision import Decision
 from .pii import TOKEN_RE, Pseudonymizer
 
@@ -57,6 +58,9 @@ def reply_problems(text: str, pseudo: Optional[Pseudonymizer] = None, *, secret_
         problems.append("reply contains a link")
     if TEMPLATE_LEFTOVERS.search(text):
         problems.append("reply contains template leftovers")
+    case_text = placeholder_problem(text)
+    if case_text:
+        problems.append(case_text)
     return problems
 
 

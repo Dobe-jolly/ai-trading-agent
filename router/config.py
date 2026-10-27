@@ -75,6 +75,9 @@ class Settings:
     portal_users_file: Path = BASE_DIR / "state/portal_users.json"
     portal_stale_minutes: int = 40
     knowledge_max_chars: int = 16000  # prompt space for switched-on staff notes (agentcore.knowledge)
+    cases: str = "off"  # find_past_cases, past cases beside the ticket (docs/retrieval.md): off | on
+    cases_days: int = 365  # past cases closed longer ago than this are never offered
+    cases_half_life_days: int = 90  # a past case's rank halves every this many days
     claude_code_oauth_token: Optional[str] = None  # a Claude subscription through the Agent SDK (agentcore.sdk_backend)
     model_backend: str = "auto"  # auto | api | agent_sdk
     osticket_ticket_url: Optional[str] = None
@@ -183,6 +186,9 @@ class Settings:
             portal_users_file=_path("PORTAL_USERS_FILE", "state/portal_users.json"),
             portal_stale_minutes=_int("PORTAL_STALE_MINUTES", 40) or 40,
             knowledge_max_chars=max(2000, _int("KNOWLEDGE_MAX_CHARS", 16000) or 16000),
+            cases=(_str("CASES", "off") or "off").lower(),
+            cases_days=max(30, _int("CASES_DAYS", 365) or 365),
+            cases_half_life_days=max(7, _int("CASES_HALF_LIFE_DAYS", 90) or 90),
             claude_code_oauth_token=_str("CLAUDE_CODE_OAUTH_TOKEN"),
             model_backend=(_str("MODEL_BACKEND", "auto") or "auto").lower(),
             osticket_ticket_url=_str("OSTICKET_TICKET_URL"),

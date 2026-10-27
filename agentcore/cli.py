@@ -1,7 +1,7 @@
 """Commands every desk has, written once. A desk subclasses DeskCli with its builders and its own commands.
 
     python -m nmbz --desk <desk> run | check | audit | compare | report | attachments | notify-test | notify-retry
-                                 | portal | portal-user | anomalies (desks with an anomaly watch)
+                                 | portal | portal-user | cases | anomalies (desks with an anomaly watch)
 """
 from __future__ import annotations
 
@@ -208,6 +208,62 @@ class DeskCli:
         finally:
             audit.close()
             mb.close()
+        return 0
+
+    def cmd_cases(self, s: Any, args: argparse.Namespace) -> int:
+        """Past cases (docs/retrieval.md): build them from closed tickets, try a search, record a cutoff after a
+        change, suppress one. Only build reads osTicket; nothing is written anywhere but the case store."""
+        from .cases.store import TAG_KINDS, CaseStore
+
+        audit = AuditLog(s.state_db)
+        try:
+            store = CaseStore(audit.db, self.desk)
+            if args.action == "build":
+                from .cases.build import CaseBuilder
+
+                mb = self.build_metabase(s)
+                try:
+                    builder = CaseBuilder(store, audit.db, self.build_store(s, mb), getattr(s, "reply_staff_id", None),
+                                          days=args.days or getattr(s, "cases_days", 365),
+                                          settle_days=args.settle_days)
+                    counts = builder.build(full=args.full)
+                except MetabaseError as exc:
+                    log.error("Metabase unavailable: %s", exc)
+                    return 2
+                finally:
+                    mb.close()
+                print(", ".join(f"{k} {v}" for k, v in counts.items()))
+            elif args.action == "search":
+                tags = {k: getattr(args, k) for k in TAG_KINDS if getattr(args, k, None)}
+                for case in store.search(args.words or [], tags, limit=args.limit):
+                    print(f"{case['case']} {case['closed']} {case['source']:5} score {case['score']} "
+                          f"matched {', '.join(case['matched'])}\n  asked: {case['what_was_asked'][:160]}\n"
+                          f"  resolved: {case['how_it_was_resolved'][:160]}")
+            elif args.action == "cutoff":
+                if not (args.since and args.note and args.by):
+                    print("A cutoff needs --since, --note and --by.")
+                    return 1
+                kind, value = (args.kind, args.value) if args.kind else (None, None)
+                cutoff_id = store.add_cutoff(date.fromisoformat(args.since), args.note, args.by, kind, value)
+                print(f"Cutoff {cutoff_id}: cases closed before {args.since} are left out"
+                      + (f" when tagged {kind}={value}" if kind else ""))
+            elif args.action == "suppress":
+                if not (args.id and args.by and args.reason):
+                    print("Suppressing needs --id, --by and --reason.")
+                    return 1
+                store.suppress(int(str(args.id).lstrip("Cc")), args.by, args.reason)
+                print(f"C{str(args.id).lstrip('Cc')} suppressed.")
+            else:
+                for key, n in sorted(store.counts().items()):
+                    print(f"{key:20} {n}")
+                for row in store.cutoffs():
+                    tag = f" ({row['kind']}={row['value']})" if row["kind"] else ""
+                    print(f"cutoff since {row['since']}{tag}: {row['note']} [{row['created_by']}]")
+        except (ValueError, LookupError) as exc:
+            print(exc)
+            return 1
+        finally:
+            audit.close()
         return 0
 
     def cmd_knowledge_seed(self, s: Any, args: argparse.Namespace) -> int:
@@ -497,6 +553,24 @@ class DeskCli:
         p.add_argument("--file", help="a notes file (default: <desk>/knowledge_seed.json)")
         p.add_argument("--dry-run", action="store_true", help="list what would be proposed")
 
+        p = sub.add_parser("cases", help="past cases: build from closed tickets, search, cutoff, suppress, stats")
+        p.add_argument("action", choices=("build", "search", "cutoff", "suppress", "stats"))
+        p.add_argument("--full", action="store_true", help="build: read every thread again, not only new tickets")
+        p.add_argument("--days", type=int, help="build: closed in the last N days (default CASES_DAYS)")
+        p.add_argument("--settle-days", type=int, default=14, help="build: closed at least N days ago")
+        p.add_argument("--words", nargs="*", help="search: plain words")
+        for kind in ("signature", "code", "channel", "reading", "action"):
+            p.add_argument(f"--{kind}", help=f"search: {kind} tag")
+        p.add_argument("--limit", type=int, default=5, help="search: how many cases")
+        p.add_argument("--since", help="cutoff: leave out cases closed before this date (YYYY-MM-DD)")
+        p.add_argument("--note", help="cutoff: what changed")
+        p.add_argument("--kind", choices=("signature", "code", "channel", "reading", "action"),
+                       help="cutoff: only cases with this tag (with --value)")
+        p.add_argument("--value", help="cutoff: the tag's value")
+        p.add_argument("--id", help="suppress: the case, e.g. C12")
+        p.add_argument("--reason", help="suppress: why")
+        p.add_argument("--by", help="cutoff, suppress: who")
+
         p = sub.add_parser("compare", help="shadow decisions vs what actually happened")
         p.add_argument("--since", default=week_ago)
         p.add_argument("--out", default="compare.csv")
@@ -509,7 +583,8 @@ class DeskCli:
         commands = {"check": self.cmd_check, "run": self.cmd_run, "audit": self.cmd_audit, "report": self.cmd_report,
                     "compare": self.cmd_compare, "portal": self.cmd_portal, "portal-user": self.cmd_portal_user,
                     "notify-test": self.cmd_notify_test, "notify-retry": self.cmd_notify_retry,
-                    "attachments": self.cmd_attachments, "knowledge-seed": self.cmd_knowledge_seed}
+                    "attachments": self.cmd_attachments, "knowledge-seed": self.cmd_knowledge_seed,
+                    "cases": self.cmd_cases}
         if self.anomaly_noun:
             commands["anomalies"] = self.cmd_anomalies
         commands.update(self.add_commands(sub))

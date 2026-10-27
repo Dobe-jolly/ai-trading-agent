@@ -468,7 +468,8 @@ class KnowledgeTools:
             })
         return out
 
-    def run(self, name: str, args: dict[str, Any], pseudo: Pseudonymizer, evidence: Any = None) -> tuple[str, bool]:
+    def run(self, name: str, args: dict[str, Any], pseudo: Pseudonymizer, evidence: Any = None,
+            ticket: Any = None) -> tuple[str, bool]:
         item = self.items[name]
         try:
             params = {slot: self._value(slot, kind, args.get(slot), pseudo) for slot, kind in item.query_slots.items()}
@@ -541,18 +542,21 @@ def _plain(value: Any) -> Any:
 
 
 class GuidedToolbox:
-    """A desk's own toolbox plus its notes' lookups. Everything else (as_of, sources) is the desk's toolbox."""
+    """A desk's own toolbox plus extra lookups: its notes' (KnowledgeTools) and past cases (agentcore.cases.tools).
+    Each extra has handles, schemas and run(name, args, pseudo, evidence, ticket). Everything else (as_of, sources)
+    is the desk's toolbox."""
 
-    def __init__(self, base: Any, extra: KnowledgeTools) -> None:
+    def __init__(self, base: Any, *extras: Any) -> None:
         self._base = base
-        self._extra = extra
+        self._extras = [e for e in extras if e]
 
     def schemas(self) -> list[dict[str, Any]]:
-        return self._base.schemas() + self._extra.schemas()
+        return self._base.schemas() + [s for extra in self._extras for s in extra.schemas()]
 
     def run(self, name: str, args: dict[str, Any], pseudo: Pseudonymizer, evidence: Any, ticket: Any) -> tuple[str, bool]:
-        if self._extra.handles(name):
-            return self._extra.run(name, args or {}, pseudo, evidence)
+        for extra in self._extras:
+            if extra.handles(name):
+                return extra.run(name, args or {}, pseudo, evidence, ticket)
         return self._base.run(name, args, pseudo, evidence, ticket)
 
     def __getattr__(self, item: str) -> Any:

@@ -26,6 +26,18 @@ MIN_NAME_PART = 3  # shorter parts ("Jo", initials) would wipe out ordinary word
 # A line that is only a greeting ("Dear Tendai,", "Good morning team"); "Dear Sir, my account was ..." is kept.
 GREETING = re.compile(r"^\s*(?:dear|hi|hello|hie|hey|greetings|good\s+(?:morning|afternoon|evening|day))\b"
                       r"[^\n.?,!:]{0,40}[,!.:]?\s*$", re.I)
+# A name nobody listed, written where branches write names: "Client Tendai Moyo", "Mr. MOYO", "account holder:
+# Rudo Banda", "name is Farai". The capitalised words after the cue are masked, up to the first ordinary word.
+CUE = (r"\b(?i:client|customer|beneficiary|account\s+holder|holder|name|mr|mrs|ms|miss|dr|madam)\b\.?"
+       r"(?:\s*[:,-]\s*|\s+)(?:(?i:is|named|called)\s+)?")
+NAME_WORD = r"(?:[A-Z][a-z'-]+|[A-Z]{3,}(?:'[A-Z]+)?)"
+CUE_NAME = re.compile(CUE + rf"({NAME_WORD}(?:\s+{NAME_WORD}){{0,3}})")
+NOT_A_NAME = set("""account accounts acc number no services service care support details detail information info mobile
+phone card cards branch bank has had was is are the and of for on in at to from with complains complained says said
+reports reported wants requested request requests transferred tried did does cannot can could would will called who
+zipit ecocash rtgs pos atm usd zwg zig otp pin visa mastercard nmb connect internet banking app online name names status
+statement complaint query transaction transactions transfer payment reversal refund wallet registration login
+please kindly team dear sir madam""".split())
 SIGN_OFF = re.compile(r"^\s*(?:(?:kind|best|warm)?\s*regards|thanks(?:\s+and\s+regards)?|thank\s+you|many\s+thanks|"
                       r"yours\s+(?:faithfully|sincerely)|sincerely|cheers)\s*[,.!]?\s*$", re.I)
 
@@ -36,6 +48,7 @@ class CaseMasker:
 
     def __init__(self, customers: Iterable[Optional[str]] = (), staff: Iterable[Optional[str]] = ()) -> None:
         self._names = _name_patterns(customers, CUSTOMER) + _name_patterns(staff, STAFF)
+        self._learned: set[str] = set()
 
     def mask(self, text: Optional[str]) -> str:
         if not text:
@@ -44,9 +57,15 @@ class CaseMasker:
         for kind, pattern in PATTERNS:
             text = pattern.sub(PLACEHOLDERS[kind], text)
         text = _drop_greeting_and_signature(text)
+        # A name found after a cue is masked wherever else it appears, here and in the case's later fields
+        # ("Client Tendai Moyo ... Tendai can retry").
+        learned = {n for n in (_cue_split(m)[0] for m in CUE_NAME.finditer(text)) if n} - self._learned
+        if learned:
+            self._learned |= learned
+            self._names += _name_patterns(learned, CUSTOMER)
         for pattern, placeholder in self._names:
             text = pattern.sub(placeholder, text)
-        return text.strip()
+        return CUE_NAME.sub(_cue_name, text).strip()
 
 
 def _name_patterns(names: Iterable[Optional[str]], placeholder: str) -> list[tuple[re.Pattern[str], str]]:
@@ -69,6 +88,27 @@ def _name_patterns(names: Iterable[Optional[str]], placeholder: str) -> list[tup
         cased = "|".join(re.escape(v) for v in sorted(variants))
         out.append((re.compile(rf"(?<![A-Za-z'\[-])(?:{cased})(?![A-Za-z'\]-])"), placeholder))
     return out
+
+
+def _cue_split(m: re.Match[str]) -> tuple[Optional[str], int]:
+    """(the name after a cue: its capitalised words up to the first ordinary one, or None; where it ends in group 1)."""
+    end = None
+    for word in re.finditer(r"\S+", m.group(1)):
+        if re.sub(r"'s$", "", word.group().lower()) in NOT_A_NAME:
+            break
+        end = word.end()
+    if end is None:
+        return None, 0
+    return re.sub(r"'s$", "", m.group(1)[:end]), end
+
+
+def _cue_name(m: re.Match[str]) -> str:
+    """The cue kept, the name after it masked."""
+    name, end = _cue_split(m)
+    if name is None:
+        return m.group(0)
+    cue = m.group(0)[:m.start(1) - m.start(0)]
+    return cue + CUSTOMER + m.group(1)[end:]
 
 
 def _drop_greeting_and_signature(text: str) -> str:
