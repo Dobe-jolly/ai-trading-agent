@@ -35,6 +35,24 @@ def test_only_opens_with_a_ticket_and_no_result_are_unresolved(tmp_path):
     assert a.unresolved_opens("paper") == []
 
 
+def test_legacy_opens_are_tagged_and_no_longer_counted_as_pending(tmp_path):
+    a = TradeAudit(tmp_path / "a.sqlite")
+    old = record_open(a, ticket=None)
+    live = record_open(a, ticket=101)                                  # has a ticket: still genuinely pending
+    done = record_open(a, ticket=102)
+    a.record_outcome(done, 1.1, 5.0, T0)
+    other_mode = record_open(a, ticket=None, mode="paper")
+
+    assert a.stats("live")["no_result_yet"] == 2
+    assert a.mark_legacy_opens("live") == 1
+    assert a.mark_legacy_opens("live") == 0                            # idempotent
+    stats = a.stats("live")
+    assert (stats["opens"], stats["no_result_yet"], stats["legacy_unresolvable"], stats["closed"]) == (2, 1, 1, 1)
+    rows = {r["id"]: r["outcome"] for r in a.recent(10)}
+    assert rows[old] == "legacy" and rows[live] == "open" and rows[other_mode] == "open"   # the paper row is untouched
+    assert [r["id"] for r in a.unresolved_opens("live")] == [live]
+
+
 def test_record_outcome_classifies_and_keeps_the_broker_close_time(tmp_path):
     a = TradeAudit(tmp_path / "a.sqlite")
     win, loss, flat = record_open(a, ticket=1), record_open(a, ticket=2), record_open(a, ticket=3)

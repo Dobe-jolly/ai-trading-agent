@@ -214,6 +214,20 @@ class TradeAudit:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def mark_legacy_opens(self, mode: str) -> int:
+        """Tag opens that have no ticket and no result as 'legacy', so they stop counting as pending.
+
+        These were opened before tickets were recorded: they can never be matched to a broker result.
+        The rows stay in place. Returns how many were tagged.
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                "UPDATE trade_decisions SET outcome='legacy' "
+                "WHERE mode=? AND final_action='open' AND outcome='open' AND position_ticket IS NULL",
+                (mode,),
+            )
+            return cur.rowcount
+
     def closed_needing_excursion(self, mode: str) -> list[dict]:
         """Closed trades with a ticket that we have not yet tried to measure."""
         with self._conn() as conn:
@@ -314,8 +328,11 @@ class TradeAudit:
                 "SUM(CASE WHEN outcome='loss' THEN 1 ELSE 0 END) AS losses, "
                 "SUM(CASE WHEN outcome='breakeven' THEN 1 ELSE 0 END) AS flat, "
                 "COALESCE(SUM(profit),0) AS total_pnl "
-                f"FROM trade_decisions WHERE {where}", args
+                f"FROM trade_decisions WHERE {where} AND outcome!='legacy'", args
             ).fetchone()
+            legacy = conn.execute(
+                f"SELECT COUNT(*) FROM trade_decisions WHERE {where} AND outcome='legacy'", args
+            ).fetchone()[0]
             actions = conn.execute(
                 "SELECT final_action, COUNT(*) AS n FROM trade_decisions GROUP BY final_action"
             ).fetchall()
@@ -333,7 +350,8 @@ class TradeAudit:
         return {
             "opens": totals["n"] or 0,
             "closed": closed,
-            "no_result_yet": no_result,          # still open, or opened before tickets were recorded
+            "no_result_yet": no_result,          # still open (opens with no ticket are tagged legacy, see mark_legacy_opens)
+            "legacy_unresolvable": legacy,       # opened before tickets were recorded; excluded from the counts above
             "wins": wins,
             "losses": losses,
             "win_rate_pct": round(wins / closed * 100, 1) if closed else None,

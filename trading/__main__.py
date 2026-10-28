@@ -396,6 +396,8 @@ def cmd_outcomes(args) -> int:
         runner.disconnect()
 
     audit = TradeAudit(s.state_db)
+    if args.mark_legacy:
+        print(f"Tagged {audit.mark_legacy_opens(s.mode)} old open(s) without a ticket as legacy.")
     print(f"Adopted {adopted} position(s) missing from the database; recorded {recorded} new result(s).\n")
     for k, v in audit.stats(mode=s.mode).items():
         if k != "actions":
@@ -453,7 +455,9 @@ def main() -> int:
     p_study.add_argument("--window", type=int, default=300, help="Bars the engine sees at each step (default 300)")
     p_study.add_argument("--step", type=int, default=2, help="Bars between observations (default 2)")
     p_study.add_argument("--top", type=int, default=20, help="Rows in the strongest-signals table (default 20)")
-    sub.add_parser("outcomes", help="Record results of closed trades; show P&L by setup and symbol")
+    p_out = sub.add_parser("outcomes", help="Record results of closed trades; show P&L by setup and symbol")
+    p_out.add_argument("--mark-legacy", action="store_true",
+                       help="Tag opens that have no ticket and no result as legacy (they can never be matched), so they stop counting as pending")
 
     p_bt = sub.add_parser("backtest", help="Historical backtest using MT5 data")
     p_bt.add_argument("--from",   dest="date_from", metavar="YYYY-MM-DD",
