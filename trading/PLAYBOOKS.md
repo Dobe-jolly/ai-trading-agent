@@ -262,6 +262,70 @@ a market with jumps or drift is to run jump-stop fills and a drift-direction pla
 **Consequence for the system prompt (not changed, awaiting your decision):** two statements are unsupported by these tests.
 "Spike fade: after a large spike, price often mean-reverts" (Boom/Crash) and "Mean-reversion and range-compression setups work well" (Step Index).
 
+## Study A: do sweeps reverse at particular times of day? Rules approved and run 2026-10-28
+
+From TODO "Entry timing", part A. The earlier signal study pooled all hours and found no edge in sweeps. This slices the same event by session, to see whether a
+slot exists where sweeps reverse reliably. It is a study of price moves, not a trading rule: if it finds something, the finding then becomes a playbook
+(Zeta) with its own pre-registered rules, stops, costs and placebo. Same discipline as Phases 1-3: rules and gate fixed now, one run, no tuning.
+
+### The event
+- **Timeframe:** H1. **Data:** 20,000 H1 bars per symbol (mid 2023 to Oct 2026).
+- **Event:** the sweep candle itself. At bar t, `geometry.analyze` over the last 300 bars reports a sweep whose candle is bar t (`bars_ago` = 0), of an **equal high or
+  equal low** (the "liquidity pool" case the clips talk about). A wick through the level with a close back inside, as the engine already defines it.
+- **Implied direction:** a swept low implies up, a swept high implies down (the reversal reading). 
+- **Outcome:** entry at the open of bar t+1, exit at the close of bar t+h, h = 4 and 12 bars, in ATRs at bar t, signed by the implied direction.
+- **Time slot** is the UTC hour of bar t (candle times assumed UTC): **Asian** 00:00-06:59, **London** 07:00-11:59, **New York** 12:00-20:59, **Late** 21:00-23:59.
+- **De-clustering:** after a kept event on a symbol, events within 12 bars are ignored.
+
+### Baseline, so a slot's drift isn't mistaken for skill
+For each symbol, half (first 60% / last 40% of history), horizon **and time slot**, the baseline is the average (unsigned-direction) forward move over ALL bars in that slot.
+An event's excess move is its move minus that baseline, taken in the event's direction. (The earlier study baselined per symbol only; matching the slot is the new part.)
+
+### Markets and cells
+- **Real:** forex (9 pairs) and metals (XAUUSD, XAGUSD), each a separate class. 2 classes x 4 slots x 2 horizons = **16 real cells**.
+- **Negative control:** the 10 Volatility indices (random, no sessions), same slicing: 8 cells. **Placebo:** random bars in the same slot, random direction, through the same pipeline.
+  A control or placebo cell that clears the gate means the study is broken, and nothing is acted on.
+
+### Gate (per cell, all at once)
+- at least 100 events after de-clustering;
+- average excess move in the sweep's direction above zero with **t >= 3.0** (16 real cells, so t >= 3 keeps the chance of any cell passing by luck at about 2%);
+- out of sample: at least 40 events, excess above zero, **t >= 1.65**;
+- the excess move must exceed **one spread** (the average spread in ATRs for that class), so a statistical effect that costs would eat does not count.
+A cell that passes is a **candidate, not a result**. It becomes a Zeta playbook with its own pre-registered rules and is tested like Alpha: with stops, costs and a placebo.
+A strongly negative cell (t <= -3, i.e. sweeps *continue* in that slot) is reported as a hint only and would need its own registered test; it cannot pass here.
+
+### What the run reports
+- Events per cell, average excess in ATRs (t), out-of-sample excess (t), hit rate against the baseline hit rate, the spread in ATRs, the control and placebo cells.
+- The count of cells tested (24 including controls) so the reader can discount.
+
+### Honest expectation
+The pooled study found nothing, and equal-level sweeps are common (a third to a half of equal levels get swept), so I expect all 16 real cells to fail. If one passes,
+my first suspicion is a time-zone or data artifact (for example, candle times not being UTC), so I would check the slot boundaries before believing it.
+
+### Study A results (run once on 2026-10-28; rules and gate as approved above)
+21 symbols, 20,000 H1 bars each (forex, metals, Volatility indices), 24 cells plus 24 placebo cells. **Candidates: 0.** No control or placebo cell cleared the gate,
+so the machine raised no alarm. Average excess in ATRs in the sweep's direction (t), after subtracting each symbol's average move in the same slot:
+
+| Class | Slot | 4-bar excess (t) | 12-bar excess (t) | Events | Out of sample (4-bar) |
+|---|---|---|---|---|---|
+| forex | Asian | -0.022 (-0.48) | -0.001 (0.00) | 978 | -0.120 (-1.70) |
+| forex | London | **-0.194 (-2.91)** | -0.164 (-1.54) | 854 | -0.202 (-1.67) |
+| forex | New York | -0.016 (-0.38) | -0.032 (-0.55) | 1,424 | -0.088 (-1.51) |
+| forex | Late | +0.103 (+1.57) | +0.146 (+1.25) | 426 | +0.143 (+1.41) |
+| metals | Asian | -0.110 (-1.36) | -0.345 (-1.83) | 250 | -0.100 (-0.76) |
+| metals | London | +0.027 (+0.16) | +0.034 (+0.11) | 138 | -0.179 (-0.76) |
+| metals | New York | -0.036 (-0.36) | -0.102 (-0.75) | 333 | -0.046 (-0.28) |
+| metals | Late | +0.213 (+0.94) | +0.205 (+0.65) | 41 | +0.070 (+0.21) |
+
+- **Sweeps do not reverse in any slot.** The hit rate against the slot's baseline is 47-58% vs 50-53%, with no cell near the t >= 3 bar on the reversal side.
+- **The one notable cell points the other way:** forex in the London slot, where sweeps *continue* (-0.194 ATR, t -2.91, out of sample t -1.67). It is just short of the registered "hint" bar
+  (t <= -3 and out of sample t <= -1.65), so by the rules fixed beforehand it is not even a hint. With 16 real cells, a cell this far out is expected by luck about 6% of the time. It is not acted on.
+- **Placebo and control cells swing as widely** (placebo metals late -0.157 to -0.754 ATR, t down to -2.30; a Volatility London cell reaches out-of-sample t +2.03 while its full-sample t is 0.89). Small cells are noisy, which is why the gate is strict.
+- Costs: one spread is about 0.10-0.12 ATR on forex and metals (0.02 on Volatility), so even a real +0.1 ATR effect would be consumed.
+
+**Conclusion: no time of day makes a liquidity sweep a reliable reversal signal on H1 forex or metals.** The sweep playbook (Zeta) stays on hold. This closes TODO "Entry timing" part A. Parts B and C (the
+bot's own entry hours, and entry quality) wait for the demo run to reach about 100 closed trades.
+
 ## Outline of later phases (to be written out fully, and approved, before they are built)
 
 - **Delta, Epsilon:** now written out in Phase 3 above.

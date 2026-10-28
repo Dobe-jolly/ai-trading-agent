@@ -59,6 +59,37 @@ Every playbook is validated in `backtest.py` before it is enabled live.
   - [ ] Only remaining hint, found after the fact so treat as a new hypothesis, not a result: gold's bearish regime tends to continue lower at 12 H4 bars (t 1.9, 1.2, 1.6 in three eras; none past 2, and gold H1 2021-mid2023 shows nothing). Needs a forward test on data that did not shape it, and must beat spread
   - [ ] Study limits to remember: fixed horizons with no stops or targets; engine parameters untuned (on purpose, to avoid overfitting); H4 not run; Delta/Epsilon not testable yet
 
+## Entry timing: when do sweeps happen, and is there a better time to enter? (added 2026-10-28, not started)
+Idea from the trading clips: look for the best moment to enter, e.g. around liquidity sweeps. What is already known: the signal study tested sweeps as a
+signal (28 symbols, 255 tests) and found **no edge**, so "enter on a sweep" is not assumed to work. What is new here is *when* things happen, and the
+quality of the bot's own entries. Each piece is a study with its rules written in PLAYBOOKS.md before any result, as in Phases 1-3.
+- [x] **A. Sweep timing profile.** Run 2026-10-28 (`python -m trading timing`): 0 candidates in 16 real cells, controls and placebo clean; no slot where sweeps reverse (forex London leans the other way, t -2.91, below the registered hint bar). Zeta stays on hold. Details in PLAYBOOKS.md. When do sweeps of equal highs/lows happen: by hour of day and session (Asian/London/New York), by symbol group,
+  and how often price continues vs reverses afterward in each slot. A sweep that is common in one session and flat in the others is the only thing worth a rule.
+  Use the existing `geometry.find_levels`; the study already counts sweeps, so this adds the time-of-day cut. Multiple-testing discount: many hour x symbol cells, so
+  state the number of cells first and use the study's baseline adjustment and out-of-sample split.
+- [ ] **B. Time-of-day check for the bot's own entries.** After about 100 closed demo trades, split results (final R, worst point) by entry hour/session and compare with the
+  placebo's random entry times on the same symbols. Answers "does the model enter at bad times". Needs the demo run to finish first; with 8 trades it says nothing.
+- [ ] **C. Entry-quality check.** For the bot's entries, compare adverse movement right after entry (the worst point, already recorded) against random entries with the same stop.
+  Tests the clip's claim that "price reverses after you buy" and whether the model's timing adds anything.
+- [ ] If A finds a time slot where sweeps reverse reliably, write it up as a pre-registered playbook (Zeta, currently on hold) and run it through the same machine with
+  jump-stop fills and a baseline placebo. If not, drop it. Whatever is found goes into the prompt only as a measured fact, never as a belief.
+
+## Study B (candidate): daily time-series momentum, a slow sleeve (added 2026-10-28, rules not written yet)
+Source: the "Trend Is Your Friend" paper pasted 2026-10-28 (a literature synthesis). Its solid evidence is not the swing-trendline rule (illustrative, one monthly US index,
+benefit mostly from sitting in cash) but **time-series momentum on weeks-to-months horizons** (Moskowitz, Ooi and Pedersen and others): an asset's own past return predicts
+its next return. That is a daily-bar idea, a different timescale from everything tested so far (H1/H4 intraday rules, all failed). It would be a separate slow sleeve, not part of the intraday agent.
+- [ ] Write the rules in PLAYBOOKS.md for approval before building (same discipline as Phases 1-3). Sketch to start from, not yet fixed:
+  - D1 bars, forex and metals, each class a separate cell; Volatility indices as the negative control (random: should fail).
+  - Signal: sign of the past N-day return (N tied to the paper's 12-month look-back, about 250 D1 bars; maybe also one shorter look-back, stated in advance), long/short/flat, held for a fixed
+    holding period, sized to a fixed volatility target.
+  - Test through the existing machine or a small variant: it needs a hold-for-many-bars rule, not a stop/target, so check first whether `playbooks/simulate.py` can express it (time-limit exit, a
+    wide stop at several ATR) or whether a returns-based test is cleaner.
+  - Costs: spread plus **swap/rollover**, which matters for multi-week holds and is not modelled yet. Check what MT5 reports for swaps before trusting any result.
+  - History: D1 goes back years on MT5 (gold to 2011 before); check how many years each symbol really has, and use an out-of-sample split by date (the last 40%), with the same placebo.
+  - Few independent bets (9 forex pairs share a dollar factor), so the effective sample is small: report that honestly and discount the t-stats.
+- [ ] Open question before any build: is a slow daily sleeve wanted at all, given the intraday agent and the daily-loss lockout? A pass would not feed the current agent.
+- Note the paper's own caveats: higher-frequency trend signals add little after costs, the reversal side depends on the market, and its headline benefit is drawdown reduction (being in cash), not extra return.
+
 ## Phase 5: Playbooks (one module each, each backtested per asset class)
 **Now run in phases, see [PLAYBOOKS.md](PLAYBOOKS.md): rules and gate are fixed before any result exists.**
 - [x] Phase 0: the test machine (`trading/playbooks/`: interface, replay simulator with pessimistic fills and costs, placebo, pre-registered gate, lookahead checker, `python -m trading playbooks`). Proven first: finds a planted edge, rejects a random walk and a reversed rule, and costs can eat an edge (230 trading tests pass)
@@ -67,7 +98,7 @@ Every playbook is validated in `backtest.py` before it is enabled live.
 - [x] Phase 3: Delta (Boom/Crash spike fade, M5) and Epsilon (Step z-score fade, M15). Run 2026-10-28. Epsilon FAIL. Delta passed the gate (+0.067 R, t 4.9) but that was a fill artifact: with jump-stop fills it is -0.095 R, and it equals a plain trade-with-the-drift placebo. Both shelved, no survivors. Added `--jump-stops` to the playbooks command
 - [x] Edited the two unsupported statements (done 2026-10-28; Boom/Crash and Step sections now say no tested edge)  [was: decide whether to edit the two unsupported statements in prompts/system_prompt.md (Boom/Crash "spike fade", Step "mean-reversion works well")]
 - [x] Phase 2: Gamma (range-edge fade in a RANGE regime) and Theta (z-score fade), H4, symmetric 2 ATR stop and target, 12-bar limit, forex and metals plus Volatility indices as a negative control. Built and run once on 2026-10-28: all six cells FAIL (forex about zero before costs, metals clearly negative, Volatility control failed as expected). Both shelved, results in PLAYBOOKS.md
-- [ ] Phase 3: Delta and Epsilon (synthetics, expected null). Phase 4: survivors only
+- [x] Phase 3 done (see above). [ ] Phase 4: survivors only (none so far)
 
 - [ ] 12. Alpha: structural pullback (forex, volatility indices)
 - [ ] 13. Beta: session breakout (forex only)

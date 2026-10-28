@@ -9,6 +9,7 @@ Usage:
   python -m trading summary                      # paper trading P&L summary
   python -m trading outcomes                     # record closed-trade results; P&L by setup and symbol
   python -m trading study --timeframe H1         # do regime/sweeps/gaps predict the next N bars?
+  python -m trading timing                       # Study A: do equal-level sweeps reverse at particular times of day?
   python -m trading playbooks [NAME]             # list playbooks, or replay one on history and judge it
   python -m trading backtest --from 2026-05-01   # backtest from May to today
   python -m trading backtest --list              # list past backtest runs
@@ -254,6 +255,47 @@ def cmd_backtest(args) -> int:
     return 0
 
 
+def cmd_timing(args) -> int:
+    """Study A: equal-level sweeps by time of day (rules fixed in PLAYBOOKS.md)."""
+    s, errors = _load()
+    if errors:
+        for e in errors:
+            log.error(e)
+        return 1
+
+    from trading.broker.metatrader import MT5Broker, MT5Error
+    from trading.study import asset_class
+    from trading.timing import CONTROL_CLASSES, REAL_CLASSES, WINDOW, HORIZONS, run
+
+    wanted = [x.strip() for x in args.symbols.split(",") if x.strip()] if args.symbols else list(s.symbols)
+    symbols = [x for x in wanted if asset_class(x) in REAL_CLASSES + CONTROL_CLASSES]
+    broker = MT5Broker()
+    candles, spreads = {}, {}
+    try:
+        broker.connect(s.mt5_login, s.mt5_password, s.mt5_server)
+        for sym in symbols:
+            data = broker.get_candles(sym, "H1", args.bars)
+            if len(data) < WINDOW + max(HORIZONS) + 50:
+                log.warning("%s: only %d bars, skipped", sym, len(data))
+                continue
+            candles[sym] = data
+            info = broker.get_symbol_info(sym)
+            spreads[sym] = (info.ask - info.bid) if info else 0.0
+            log.info("%s: %d bars (%s to %s)", sym, len(data), data[0].time.date(), data[-1].time.date())
+    except MT5Error as exc:
+        log.error("MT5: %s", exc)
+        return 1
+    finally:
+        broker.disconnect()
+    if not candles:
+        log.error("No symbol had enough history.")
+        return 1
+    result = run(candles, spreads)
+    print(result.text())
+    print(f"\nFull results: {result.save(s.state_db.parent)}")
+    return 0
+
+
 def cmd_study(args) -> int:
     """Test whether regime, sweeps, gaps and breaks predict the next N bars on historical candles."""
     s, errors = _load()
@@ -455,6 +497,9 @@ def main() -> int:
     p_study.add_argument("--window", type=int, default=300, help="Bars the engine sees at each step (default 300)")
     p_study.add_argument("--step", type=int, default=2, help="Bars between observations (default 2)")
     p_study.add_argument("--top", type=int, default=20, help="Rows in the strongest-signals table (default 20)")
+    p_tm = sub.add_parser("timing", help="Study A: do equal-level sweeps reverse at particular times of day?")
+    p_tm.add_argument("--bars", type=int, default=20000, help="H1 history per symbol (default 20000)")
+    p_tm.add_argument("--symbols", help="Comma-separated symbols (default: configured forex, metals and Volatility indices)")
     p_out = sub.add_parser("outcomes", help="Record results of closed trades; show P&L by setup and symbol")
     p_out.add_argument("--mark-legacy", action="store_true",
                        help="Tag opens that have no ticket and no result as legacy (they can never be matched), so they stop counting as pending")
@@ -490,6 +535,8 @@ def main() -> int:
         return cmd_backtest(args)
     if args.cmd == "outcomes":
         return cmd_outcomes(args)
+    if args.cmd == "timing":
+        return cmd_timing(args)
     if args.cmd == "study":
         return cmd_study(args)
     if args.cmd == "playbooks":
