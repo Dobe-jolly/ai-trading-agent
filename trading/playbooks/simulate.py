@@ -7,6 +7,8 @@ Conventions, all chosen to be pessimistic where the candle data can't tell:
   - If a bar opens beyond the stop, the fill is at that open (a gap), which is worse than the stop.
   - One full spread is charged per trade, expressed in R (spread / stop distance).
   - R is measured against the initial stop distance: a stop-out is about -1R before costs.
+  - Optional `jump_stops` (off by default): a bar that touches the stop and closes beyond it fills at the close,
+    for markets where price jumps (Boom/Crash spikes) instead of passing through every price.
 """
 from __future__ import annotations
 
@@ -37,7 +39,7 @@ class SimResult:
     free_bars: int            # bars on which a signal could have been taken (flat and warmed up)
 
 
-def simulate(symbol: str, bars: Bars, playbook: Playbook, spread: float = 0.0) -> SimResult:
+def simulate(symbol: str, bars: Bars, playbook: Playbook, spread: float = 0.0, jump_stops: bool = False) -> SimResult:
     n = len(bars)
     split = int(n * (1 - OOS_FRACTION))
     trades: list[Trade] = []
@@ -51,14 +53,14 @@ def simulate(symbol: str, bars: Bars, playbook: Playbook, spread: float = 0.0) -
             t += 1
             continue
         signals += 1
-        trade = _trade(symbol, bars, playbook, sig, t, a, spread, split)
+        trade = _trade(symbol, bars, playbook, sig, t, a, spread, split, jump_stops)
         trades.append(trade)
         t = max(trade.exit_index, t + 1)
     return SimResult(trades, signals, free)
 
 
 def _trade(symbol: str, bars: Bars, pb: Playbook, sig: Signal, t: int, a: float,
-           spread: float, split: int) -> Trade:
+           spread: float, split: int, jump_stops: bool = False) -> Trade:
     d = sig.direction
     entry_i = t + 1
     entry = bars.opens[entry_i]
@@ -77,7 +79,10 @@ def _trade(symbol: str, bars: Bars, pb: Playbook, sig: Signal, t: int, a: float,
         stop_hit = lo <= stop if d > 0 else hi >= stop
         target_hit = hi >= target if d > 0 else lo <= target
         if stop_hit:                                      # stop wins a tie within one bar
-            return Trade(symbol, entry_i, j, d, -1.0 - cost, "stop", int(entry_i >= split))
+            r = -1.0
+            if jump_stops and d * (bars.closes[j] - stop) < 0:        # a jump through the stop: filled at the close
+                r = d * (bars.closes[j] - entry) / risk
+            return Trade(symbol, entry_i, j, d, r - cost, "stop", int(entry_i >= split))
         if target_hit:
             return Trade(symbol, entry_i, j, d, reward / risk - cost, "target", int(entry_i >= split))
 

@@ -38,7 +38,7 @@ and fails an edge that costs consume.
 | 0 | The test machine, with its own proof | **Done** |
 | 1 | Alpha (trend pullback), Beta (session breakout): forex and metals | **Done: all four cells FAIL, both shelved** (results below) |
 | 2 | Gamma and Theta (mean reversion): forex, metals, plus Volatility indices as a negative control | **Done: all six cells FAIL, both shelved** (results below) |
-| 3 | Delta (Boom/Crash), Epsilon (Step) | Outline only; expected null by construction |
+| 3 | Delta (Boom/Crash spike fade), Epsilon (Step Index z-score fade) | **Done: no survivors.** Epsilon FAIL; Delta passed the gate but failed both follow-up checks (fill artifact, and no better than trading with the drift) |
 | 4 | Survivors only: routing, then a demo comparison against the model's own trades | Not started |
 
 ## Phase 1: rules (fixed; parameters are conventional values, not fitted)
@@ -183,9 +183,88 @@ What the numbers say, without chasing them:
 - **Metals:** both lose clearly (Theta t -3.86, worse than its placebo by 0.05 R). Fading extremes in gold and silver went against them over 2021-2026, a period of strong trends. This is a negative result, not a signal to flip: a reversed rule would be the momentum idea that already failed in Alpha.
 - **Control:** both Volatility cells failed the gate, so the machine raised no alarm. Gamma on Volatility came close on two of the criteria (t +1.67, out-of-sample t +1.74, +0.034 R over the placebo), but it still missed the t >= 3 bar and the 0.05 R margin. Across six cells, one at t 1.7 on a random process is what chance produces, and it is not treated as a lead. Nothing is acted on.
 
+## Phase 3: Boom/Crash and Step, rules written and approved 2026-10-28
+
+Both are random processes by construction (Boom and Crash: a small steady drift plus memoryless random spikes; Step: a symmetric walk in fixed
+steps), so the expected result is null. They are tested because the model's system prompt currently tells it that "after a large spike, price often
+mean-reverts" and that "mean-reversion setups work well" on Step Index. Phase 3 checks whether those two statements hold up. Same machine, same gate,
+same placebo, one run each, no tuning.
+
+### Delta: fade a spike on Boom and Crash
+- **Timeframe: M5, not H1.** Boom 1000 spikes about once per 33 minutes and Boom 300 about once per 10, so almost every H1 bar contains a spike and
+  "a spike bar" would mean nothing. On M5 a spike bar is the exception. (This replaces the "H1" in the earlier outline, for that stated reason.)
+- **Markets:** Boom 300, 500, 1000 and Crash 300, 500, 1000, scored together as one class (`boom_crash`).
+- **Spike bar:** the bar's body (close minus open) is at least 3.0 times the ATR measured at the **previous** bar (a spike must not inflate the ATR it is
+  judged against). Up spikes are Boom's and down spikes are Crash's, so the rule reads the bar, not the symbol name.
+- **Signal:** at the close of a spike bar, trade **against** it: sell after an up spike, buy after a down spike (which is also the direction of the
+  drift). Another spike bar within the trade is not special-cased.
+- **Trade:** stop 2.0 ATR, target 2.0 ATR, time limit 12 bars (one hour). ATR is Wilder's 14-bar ATR at the signal bar, as in every playbook.
+- **Known weakness of the test, stated now:** the machine fills a stop at its price whenever a bar's range reaches it. A real spike is a jump through the
+  stop, so a real fill would be worse. This flatters short-Boom and long-Crash trades. A pass here would therefore not be trusted until fills were
+  re-checked with slippage; a fail is unaffected.
+
+### Epsilon: fade a statistical extreme on Step Index
+- **Timeframe:** M15. **Market:** Step Index (the one symbol on the watchlist), class `step`.
+- **Rule:** exactly Theta's: z of the close against the last 20 closes, buy on a fresh z of -2.0 or lower, sell on a fresh z of +2.0 or higher.
+- **Trade:** stop 2.0 ATR, target 2.0 ATR, time limit 12 bars. Implemented as a subclass of Theta that changes only the market and timeframe, so the
+  rule is the one already tested.
+- Idea: Step moves in tiny equal steps with no memory, so a stretched price has no reason to snap back. This confirms or refutes the prompt's claim.
+
+### Procedure
+- Delta: 30,000 M5 bars per symbol (about 100 days), 6 symbols. Epsilon: 30,000 M15 bars (about 10 months), 1 symbol. Seed 0, one run each.
+- 2 tests in all. Both are expected nulls, so neither counts as a hope; a PASS is treated first as a fault in the machine or the data, as with the Volatility control.
+- A fail shelves the rule. Whatever the outcome, if a prompt statement is refuted I will propose changing that prompt text (not do it unasked).
+
+## Phase 3 results (run once on 2026-10-28, rules and gate as approved above, placebo seed 0)
+
+Delta on M5 (Boom and Crash 300, 500, 1000; 30,000 bars each, 2026-07-15 to 2026-10-28). Epsilon on M15 (Step Index, 30,000 bars, 2025-12-19 to 2026-10-28).
+
+| Playbook | Class | Trades | Win% | Avg R | t | Out of sample R (t) | Placebo R | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| Delta | boom_crash | 4,792 | 57.1 | +0.067 | +4.92 | +0.064 (+2.94) | -0.084 | **PASS** |
+| Epsilon | step | 1,357 | 48.8 | -0.023 | -0.96 | -0.003 (-0.08) | -0.017 | FAIL, as expected |
+
+Epsilon is shelved: the prompt's claim that mean reversion works on Step Index is not supported (it is about zero before costs).
+
+**Delta passed the gate. That is not accepted as a finding.** Phase 3 said a pass would be treated first as a fault in the machine or data, and two
+faults are plausible on a Boom/Crash index, which has a steady drift plus memoryless random spikes:
+1. **Fills.** The machine ends a stopped trade at exactly -1R (the stop price). A real spike is a jump through the stop, so a short on Boom that meets a
+   spike loses several R, not one. Delta trades against the spike, i.e. with the drift, so it is the rule most flattered by this.
+2. **Drift, not spikes.** The gate's placebo trades random directions, so the drift cancels in it. A rule that simply always trades with the drift
+   (sell Boom, buy Crash) beats it without the spike condition adding anything.
+
+### Registered before running: two diagnostic checks on Delta (one run each, no parameter changes)
+- **Jump stops.** If a bar touches the stop and also CLOSES beyond it, the fill is the bar's close (worse than the stop); otherwise the stop price.
+  Applied to the real rule and the placebo alike. Reading: Delta must still pass the full gate under this rule, or the pass was a fill artifact.
+- **Drift placebo.** Random entries, but always in the drift direction (sell on Boom, buy on Crash, read from the symbol name), same stop, target,
+  time limit and entry rate as Delta, under the jump-stop fills. Reading: the spike condition has value only if Delta beats this by at least 0.05 R in
+  average R, in total and out of sample. If it does not, Delta is "trade with the drift",
+  which is a known property of the index, not a spike rule, and the system prompt's "spike fade" claim is unsupported.
+- Both checks are descriptive and cannot rescue a failure. Delta is a candidate for Phase 4 only if it clears both.
+
+### Result of the two checks (run once, 2026-10-28; same six symbols, 30,000 M5 bars, jump-stop fills for every row)
+
+| Row | Trades | Win% | Avg R (t) | Out of sample R (t) |
+|---|---|---|---|---|
+| Delta | 4,792 | 57.2 | -0.095 (-5.49) | -0.105 (-3.78) |
+| Random-direction placebo | 5,033 | 50.4 | -0.218 (-13.20) | -0.218 (-8.34) |
+| Drift placebo (sell Boom, buy Crash) | 5,011 | 58.9 | -0.110 (-6.20) | -0.103 (-3.61) |
+
+- **Check 1, jump stops: FAIL.** Under realistic fills Delta averages -0.095 R (t -5.49), not +0.067 R. The earlier pass was a fill artifact: the machine had
+  capped every spike loss at -1R.
+- **Check 2, drift placebo: FAIL.** Delta beats trading blindly with the drift by only +0.015 R in total and -0.002 R out of sample (needed +0.05 in both).
+  The spike condition adds nothing: Delta is "trade with the drift", which loses money here after costs. Its 57% win rate is the drift's win rate (59% for the placebo).
+- Per symbol, Delta is negative on five of the six (Crash 300 is +0.054 on 298 trades, which at that size is noise).
+
+**Delta is shelved. Phase 3 is closed with no survivors.** The gate's random-direction placebo could not see either problem: a lesson for any future rule on
+a market with jumps or drift is to run jump-stop fills and a drift-direction placebo as part of the first test, not after a pass.
+
+**Consequence for the system prompt (not changed, awaiting your decision):** two statements are unsupported by these tests.
+"Spike fade: after a large spike, price often mean-reverts" (Boom/Crash) and "Mean-reversion and range-compression setups work well" (Step Index).
+
 ## Outline of later phases (to be written out fully, and approved, before they are built)
 
-- **Delta:** Boom and Crash spike behaviour on H1 (what price does after a spike candle). Epsilon: Step Index channel behaviour.
+- **Delta, Epsilon:** now written out in Phase 3 above.
 - **Dropped for now:** Zeta (sweep reversal) and Eta (gap fill): the signal study found no edge. They can be re-tested through
   this machine as ordinary playbooks if you want the question closed with stops and targets included, which the earlier
   fixed-horizon study did not have.

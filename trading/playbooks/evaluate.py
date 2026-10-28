@@ -153,7 +153,7 @@ class Report:
 
 def run_playbook(
     playbook: Playbook, candles_by_symbol: dict[str, list], spreads: Optional[dict[str, float]] = None,
-    seed: str = "0",
+    seed: str = "0", jump_stops: bool = False,
 ) -> Report:
     """Simulate the playbook on every symbol it is meant for, plus a placebo on each, and judge per class."""
     spreads = spreads or {}
@@ -167,9 +167,9 @@ def run_playbook(
             continue
         bars = Bars.from_candles(candles)
         spread = spreads.get(symbol, 0.0)
-        real = simulate(symbol, bars, playbook, spread)
+        real = simulate(symbol, bars, playbook, spread, jump_stops)
         rate = real.signals / real.free_bars if real.free_bars else 0.0
-        fake = simulate(symbol, bars, Placebo(playbook, rate, f"{seed}:{symbol}"), spread)
+        fake = simulate(symbol, bars, Placebo(playbook, rate, f"{seed}:{symbol}"), spread, jump_stops)
         real_by_class.setdefault(group, []).extend(real.trades)
         placebo_by_class.setdefault(group, []).extend(fake.trades)
         symbols_by_class.setdefault(group, []).append(symbol)

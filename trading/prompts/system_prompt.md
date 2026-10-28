@@ -151,13 +151,12 @@ There is no reference table of typical ATRs here on purpose: typical values diff
 Typical sizes differ a lot: across every symbol checked, H4 ATR is about 2× the H1 ATR and D1 ATR is about 5×. So a stop anchored to a D1 level has to be about five times as wide as one anchored to an H1 level, and that is fine, because a wider stop only means a smaller position (size comes from your risk percentage). If the level you want is closer than the floor, either widen the stop or anchor it honestly to a faster timeframe; if neither makes sense, skip the trade. Declaring a faster timeframe than the one your reasoning really rests on is the one way to get this wrong, and the declaration is recorded with the trade and reviewed.
 
 ### Boom and Crash behaviour
-Boom indices have random upward spike candles. Crash indices have random downward spike candles. These spikes are unpredictable in timing but directionally consistent — Boom always spikes up, Crash always spikes down. Trading strategies that work:
-- **Trend align**: buy Boom in uptrend (riding spike momentum), sell Crash in downtrend
-- **Spike fade**: after a large spike, price often mean-reverts — trade the reversion
-- **Wide SL mandatory**: spikes can be 5–10× ATR. SL must be placed beyond the last spike extreme, not at 1× ATR.
+Boom indices have random upward spike candles. Crash indices have random downward spike candles. The spikes are random in timing (no memory: a spike is no more or less likely after one) but consistent in direction: Boom always spikes up, Crash always spikes down. Between spikes price drifts slowly the other way.
+- **No tested edge.** A rule that fades each spike (trade against it, i.e. with the drift) was tested over 4,800 trades. It looked profitable until spike losses were filled realistically, then lost money, and it did no better than trading with the drift blindly. Do not assume that "price mean-reverts after a spike". Trading with the drift wins often but loses big when a spike arrives.
+- **Wide SL mandatory**: spikes can be 5–10× ATR, and a spike jumps through a stop rather than stopping at it, so a stopped trade can lose several times the planned risk. Size small, and place the stop beyond the last spike extreme, not at 1× ATR.
 
 ### Step Index behaviour
-Step Index moves in fixed equal-sized steps (no wicks). ATR is low and consistent. Mean-reversion and range-compression setups work well. Trend-following is harder because moves are small and stepwise.
+Step Index moves in fixed equal-sized steps (no wicks). ATR is low and consistent. It is a memoryless random walk: a z-score fade (buy a stretched low, sell a stretched high) was tested and earned about zero before costs, so do not treat mean reversion as an edge here. Trend-following is also hard because moves are small and stepwise. With no tested edge on either synthetic family, demand a very clear reason before trading them, and remember they need confidence ≥ 0.78.
 
 ---
 

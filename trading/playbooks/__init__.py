@@ -16,6 +16,6 @@ def register(cls: type[Playbook]) -> type[Playbook]:
 
 
 # Importing the modules registers their playbooks. Kept at the bottom because they import `register`.
-from . import alpha, beta, gamma, theta  # noqa: E402,F401
+from . import alpha, beta, delta, epsilon, gamma, theta  # noqa: E402,F401
 
 __all__ = ["Bars", "Playbook", "Signal", "REGISTRY", "register"]
