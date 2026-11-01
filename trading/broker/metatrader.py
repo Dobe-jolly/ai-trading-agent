@@ -342,6 +342,13 @@ class MT5Broker:
             for r in rates
         ]
 
+    def last_tick_time(self, symbol: str) -> Optional[int]:
+        """Seconds (broker clock) of the symbol's latest quote, or None when there is none."""
+        if not self.ensure_connected():
+            return None
+        info = self._mt5.symbol_info_tick(symbol)
+        return int(info.time) if info is not None and getattr(info, "time", 0) else None
+
     def get_symbol_info(self, symbol: str) -> Optional[SymbolInfo]:
         if not self.ensure_connected():
             return None

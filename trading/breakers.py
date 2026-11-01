@@ -3,6 +3,7 @@
 Each check is deterministic and cheap, so a halted scan costs no API calls:
   - blackout hours: daily rollover, when forex spreads blow out (synthetics trade 24/7)
   - broker latency: orders sent over a slow link fill far from the price the model saw
+  - closed markets: forex and metals with no fresh quote (weekends) are skipped, saving model calls
   - drawdown lockout: after the daily loss limit trips, stay out for a fixed time
 
 A halt blocks new opens only. Symbols that already have a position still go through
@@ -23,6 +24,29 @@ Window = tuple[int, int]  # start, end in minutes since 00:00 UTC; end < start w
 
 def is_synthetic(symbol: str) -> bool:
     return "Index" in symbol
+
+
+def closed_markets(last_tick: dict[str, Optional[int]], stale_min: float) -> dict[str, str]:
+    """Forex and metals whose market looks closed, with the reason, from each symbol's last quote time.
+
+    Weekends and holidays stop forex and metals quotes while synthetics tick 24/7, so a quote far
+    older than the freshest one on the list means the market is shut. Comparing against that
+    reference, not the clock, avoids guessing the broker's time zone. Synthetics are never reported.
+    A symbol with no quote at all is reported too: the model could not see a price for it either.
+    """
+    seen = [t for t in last_tick.values() if t]
+    if stale_min <= 0 or not seen:
+        return {}
+    newest = max(seen)
+    closed: dict[str, str] = {}
+    for symbol, t in last_tick.items():
+        if is_synthetic(symbol):
+            continue
+        if not t:
+            closed[symbol] = "no quote from the broker"
+        elif newest - t > stale_min * 60:
+            closed[symbol] = f"market closed: last quote {(newest - t) / 60:.0f} min older than the freshest"
+    return closed
 
 
 def parse_blackouts(spec: str) -> list[Window]:

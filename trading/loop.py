@@ -46,6 +46,20 @@ class AgentError(RuntimeError):
     """Claude API unreachable; the symbol scan is skipped and retried next run."""
 
 
+class UsageLimitError(AgentError):
+    """The plan's usage limit is used up. Every further call in this scan would fail the same way."""
+
+
+def is_usage_limit(text: str) -> bool:
+    """True for "You've hit your limit ... resets ..." style errors, not a brief per-minute rate limit."""
+    low = text.lower()
+    return "hit your limit" in low or "usage limit" in low
+
+
+def _agent_error(message: str, exc: Exception) -> AgentError:
+    return (UsageLimitError if is_usage_limit(str(exc)) else AgentError)(message)
+
+
 @dataclass
 class TradeResult:
     decision: TradeDecision
@@ -137,7 +151,7 @@ class MarketAgent:
             except Exception as exc:  # noqa: BLE001
                 from agentcore.sdk_backend import SdkError
                 if isinstance(exc, SdkError):
-                    raise AgentError(f"Model call failed (Agent SDK): {exc}") from exc
+                    raise _agent_error(f"Model call failed (Agent SDK): {exc}", exc) from exc
                 raise
             return result
 
@@ -155,7 +169,7 @@ class MarketAgent:
                     messages=messages,
                 )
             except anthropic.APIError as exc:
-                raise AgentError(f"Claude API error: {type(exc).__name__}: {exc}") from exc
+                raise _agent_error(f"Claude API error: {type(exc).__name__}: {exc}", exc) from exc
 
             usage = getattr(response, "usage", None)
             result.input_tokens += getattr(usage, "input_tokens", 0) or 0

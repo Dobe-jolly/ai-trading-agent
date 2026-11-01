@@ -21,12 +21,12 @@ from typing import Any, Optional
 from agentcore.sdk_backend import build_client
 
 from .audit import TradeAudit
-from .breakers import Lockout, halt_reason, parse_blackouts
+from .breakers import Lockout, closed_markets, halt_reason, parse_blackouts
 from .broker.metatrader import MT5Broker, Position, SymbolInfo
 from .config import Settings
 from .decision import CLOSE, MODIFY, OPEN, WAIT, TradeDecision
 from .guardrails import apply_guardrails, atr_for, open_risk_pct
-from .loop import AgentError, MarketAgent, TradeResult
+from .loop import AgentError, MarketAgent, TradeResult, UsageLimitError
 from .paper import PaperEngine
 from .prompt import render_prompt
 from .tools import TradingToolbox
@@ -44,15 +44,17 @@ class ScanSummary:
     blocked: Counter = field(default_factory=Counter)
     mode: str = "paper"
     halted: str = ""             # set when the whole scan was skipped by a lockout
+    usage_limit: str = ""        # set when the scan stopped early because the model's usage limit ran out
 
     def line(self) -> str:
         if self.halted:
             return f"trading scan {self.run_id} [{self.mode}]: HALTED, no model calls: {self.halted}"
         acts = ", ".join(f"{k}={v}" for k, v in sorted(self.actions.items())) or "none"
         blocked = ", ".join(f"{k}={v}" for k, v in sorted(self.blocked.items())) or "none"
-        return (f"trading scan {self.run_id} [{self.mode}]: "
+        line = (f"trading scan {self.run_id} [{self.mode}]: "
                 f"symbols={self.symbols_scanned} decided={self.decided} errors={self.errors} "
                 f"actions[{acts}] blocked[{blocked}]")
+        return line + (f" STOPPED EARLY, model usage limit: {self.usage_limit}" if self.usage_limit else "")
 
 
 class TradingRunner:
@@ -226,6 +228,17 @@ class TradingRunner:
 
     # ---- main scan ---------------------------------------------------------------
 
+    def _closed_markets(self, symbols: list[str]) -> dict[str, str]:
+        """Forex/metals symbols to skip because their market is closed (see breakers.closed_markets)."""
+        quote_time = getattr(self._broker, "last_tick_time", None)
+        if quote_time is None or self.s.market_stale_min <= 0:
+            return {}
+        try:
+            return closed_markets({sym: quote_time(sym) for sym in symbols}, self.s.market_stale_min)
+        except Exception as exc:  # noqa: BLE001 — a failed check must not stop the scan
+            log.warning("could not check which markets are closed: %s", exc)
+            return {}
+
     def run(self, symbols: Optional[list[str]] = None) -> ScanSummary:
         assert self._agent is not None, "Call connect() first"
         # The per-scan cap on new opens goes to whichever symbols are reached first, so the order is
@@ -275,6 +288,7 @@ class TradingRunner:
 
         ping_ms = self._broker.ping_ms()
         windows = parse_blackouts(self.s.blackout_utc)
+        closed = self._closed_markets(symbols)
 
         # ── Phase 1: Analyst — collect decisions for all symbols ──────────────
         proposals: list[tuple[str, TradeResult, Any, Optional[SymbolInfo]]] = []
@@ -293,6 +307,17 @@ class TradingRunner:
 
             summary.symbols_scanned += 1
             log.info("Scanning %s ...", symbol)
+
+            # Forex and metals with no fresh quote (weekend) can neither be analysed nor traded.
+            if symbol in closed:
+                log.info("%s: skipped, %s", symbol, closed[symbol])
+                self._audit.record(
+                    run_id=summary.run_id, mode=self.s.mode, symbol=symbol,
+                    proposed_action=WAIT, final_action=WAIT,
+                    guardrail_notes=[closed[symbol]],
+                )
+                summary.blocked["market_closed"] += 1
+                continue
 
             # A halt blocks new opens. With nothing open on the symbol there is nothing
             # to manage, so skip the model call; otherwise it may still close or tighten.
@@ -317,6 +342,13 @@ class TradingRunner:
                     proposed_action=WAIT, final_action=WAIT,
                     error=str(exc)[:500],
                 )
+                if isinstance(exc, UsageLimitError):
+                    # The rest of the symbols would fail the same way, so stop here. Decisions already
+                    # made in this scan still go on to execution below.
+                    summary.usage_limit = str(exc)[:200]
+                    log.error("ALERT: model usage limit reached, stopping the scan after %d symbol(s): %s",
+                              summary.symbols_scanned, exc)
+                    break
                 continue
 
             symbol_info = self._broker.get_symbol_info(symbol)

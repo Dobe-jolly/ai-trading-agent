@@ -68,6 +68,7 @@ class Settings:
     max_total_risk_pct: float            # cap on risk across all open trades, % of balance
     blackout_utc: str                    # "HH:MM-HH:MM,..." no new forex/metal opens (UTC); "" disables
     max_latency_ms: float                # no new opens when broker ping exceeds this; 0 disables
+    market_stale_min: float              # forex/metals whose last quote is older than this (vs the freshest quote) are treated as closed; 0 disables
     lockout_hours: float                 # stay out this long after the daily loss limit trips
     lockout_file: Path
     spread_max_pips: float               # don't trade if spread > this (forex/metals)
@@ -116,6 +117,7 @@ class Settings:
             max_total_risk_pct=_float("MAX_TOTAL_RISK_PCT", 40.0) or 40.0,
             blackout_utc=_str("BLACKOUT_UTC", "21:00-22:00") or "",
             max_latency_ms=_float("MAX_LATENCY_MS", 1000.0) or 0.0,
+            market_stale_min=_float("MARKET_STALE_MIN", 30.0) or 0.0,
             lockout_hours=_float("LOCKOUT_HOURS", 24.0) or 24.0,
             lockout_file=BASE_DIR / "trading" / "state" / f"LOCKOUT.{(_str('MODE', 'paper') or 'paper').lower()}",
             spread_max_pips=_float("SPREAD_MAX_PIPS", 5.0) or 5.0,
