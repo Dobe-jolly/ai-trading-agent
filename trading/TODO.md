@@ -59,6 +59,14 @@ Every playbook is validated in `backtest.py` before it is enabled live.
   - [ ] Only remaining hint, found after the fact so treat as a new hypothesis, not a result: gold's bearish regime tends to continue lower at 12 H4 bars (t 1.9, 1.2, 1.6 in three eras; none past 2, and gold H1 2021-mid2023 shows nothing). Needs a forward test on data that did not shape it, and must beat spread
   - [ ] Study limits to remember: fixed horizons with no stops or targets; engine parameters untuned (on purpose, to avoid overfitting); H4 not run; Delta/Epsilon not testable yet
 
+## Demo run checkpoints
+- 2026-11-02: 25 closed, avg final R -0.03 (t -0.13), 36% wins, 10 trades reached +1R. Post-fix trades (with a stop timeframe) about break-even on 17. Dollar P&L -1358 is mostly three Volatility 75 trades, one pre-sizing-fix.
+- 2026-11-04 entry-quality look at 28 closed trades (descriptive, nothing applied): bot avg final R -0.14 vs +0.20 for random entries with the same symbol, direction, stop and target (diff -0.34, t -1.51; the random baseline carries the recent drift in the bot's mostly-sell direction, 23 sells of 28). 17 of 28 hit the full stop; 10 of 19 losers never got more than 0.25R in favour. Fixed take-profit at 0.5 to 2R never beat the actual exits (so exits are not the leak). Hints to test forward, not rules: entries against the prior 24h move -0.55R (n 15) vs with it +0.35R (n 13), Welch t 2.0 but about 12 splits were looked at; Boom/Crash 0 of 3 (-1.06R); buys 1 of 5; forex 3 trades +0.86R, metals 7 -0.21R, Volatility indices 15 -0.12R (random by construction).
+- [ ] Store the decision time and the quote at decision in the audit (today only the order time is stored, so the 1.6h scan lag and the planned-vs-actual entry cannot be measured).
+- [ ] Pre-register forward tests for the next ~70 trades before changing any rule: (a) forex+metals judged separately from synthetics; (b) no entries against the prior 24h move; (c) Boom/Crash halted; (d) limit orders at the model's level instead of market orders at scan end (needs pending-order support).
+- [ ] Review again at about 50 closed trades (`python -m trading outcomes`): is the R result settling, which setups and symbols carry it, how much of it is the pre-fix trades. Then at about 100: the verdict (average R above 0 with t >= 2).
+- [ ] At about 100: run Entry-timing parts B and C (entry hours and entry quality vs the placebo).
+
 ## Scan cost (added 2026-11-01)
 - [x] Closed-market skip: forex/metals with a quote older than `TRADING_MARKET_STALE_MIN` (30 min) than the freshest quote on the list are skipped without a model call (weekends: 11 of 28 symbols). Checked live on a Sunday.
 - [x] Usage-limit stop: the first "You've hit your limit" error ends the scan (decisions already made still execute) instead of 28 failing calls; the summary line says STOPPED EARLY. The shell loop still sleeps its fixed 4 hours, so a limit that resets later costs one failed call per run.

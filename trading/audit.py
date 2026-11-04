@@ -77,6 +77,9 @@ _ADDED_COLUMNS = (
     ("final_r", "REAL"),                    # where it ended, same units
     ("excursion_tried", "INTEGER DEFAULT 0"),
     ("stop_timeframe", "TEXT"),             # H1 | H4 | D1: the timeframe the model anchored its stop to
+    ("decided_at", "TEXT"),                 # when the model answered (created_at is when the order went out, up to ~2h later)
+    ("decision_bid", "REAL"),               # the quote at that moment, to compare with the fill
+    ("decision_ask", "REAL"),
 )
 
 
@@ -148,6 +151,9 @@ class TradeAudit:
         transcript: Optional[Any] = None,
         created_at: Optional[datetime] = None,
         stop_timeframe: str = "",
+        decided_at: Optional[datetime] = None,
+        decision_bid: float = 0.0,
+        decision_ask: float = 0.0,
     ) -> int:
         now = (created_at or datetime.now(tz=timezone.utc)).isoformat(timespec="seconds")
         with self._conn() as conn:
@@ -157,8 +163,8 @@ class TradeAudit:
                     direction, risk_pct, sl_pips, tp_pips, lots, entry_price, sl_price, tp_price,
                     confidence, setup, reason, evidence, guardrail_notes, position_ticket,
                     executed, error, input_tokens, output_tokens, turns, transcript, outcome,
-                    stop_timeframe)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    stop_timeframe, decided_at, decision_bid, decision_ask)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (run_id, now, mode, symbol, proposed_action, final_action,
                  direction, risk_pct, sl_pips, tp_pips, lots, entry_price, sl_price, tp_price,
                  confidence, setup, reason,
@@ -169,7 +175,9 @@ class TradeAudit:
                  error, input_tokens, output_tokens, turns,
                  json.dumps(transcript) if transcript else None,
                  "open" if final_action == "open" else "n/a",
-                 stop_timeframe or None),
+                 stop_timeframe or None,
+                 decided_at.isoformat(timespec="seconds") if decided_at else None,
+                 decision_bid or None, decision_ask or None),
             )
             return int(cursor.lastrowid)
 

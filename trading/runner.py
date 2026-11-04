@@ -292,6 +292,9 @@ class TradingRunner:
 
         # ── Phase 1: Analyst — collect decisions for all symbols ──────────────
         proposals: list[tuple[str, TradeResult, Any, Optional[SymbolInfo]]] = []
+        # When the model answered and the quote then, per symbol. Orders go out after every symbol
+        # has been analysed, so this is the only way to see how far the fill drifted from the idea.
+        decision_marks: dict[str, tuple[datetime, float, float]] = {}
         sim_positions = list(all_positions)  # grows with pending opens for count check
         _pending_ticket = 90000
         # Risk already on the table; grows by each open approved earlier in this scan.
@@ -352,6 +355,9 @@ class TradingRunner:
                 continue
 
             symbol_info = self._broker.get_symbol_info(symbol)
+            decision_marks[symbol] = (datetime.now(timezone.utc),
+                                      symbol_info.bid if symbol_info else 0.0,
+                                      symbol_info.ask if symbol_info else 0.0)
             guard = apply_guardrails(
                 decision=result.decision,
                 account=account,
@@ -439,6 +445,9 @@ class TradingRunner:
                 guardrail_notes=guard.notes,
                 position_ticket=opened_ticket or final.position_ticket,
                 stop_timeframe=final.stop_timeframe,
+                decided_at=decision_marks[symbol][0],
+                decision_bid=decision_marks[symbol][1],
+                decision_ask=decision_marks[symbol][2],
                 executed=executed,
                 error=error,
                 input_tokens=result.input_tokens,
