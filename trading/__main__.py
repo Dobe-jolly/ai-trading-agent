@@ -444,6 +444,12 @@ def cmd_outcomes(args) -> int:
     for k, v in audit.stats(mode=s.mode).items():
         if k != "actions":
             print(f"  {k}: {v}")
+    if args.cohort:
+        c = audit.cohort_stats(args.cohort, mode=s.mode, since=args.since)
+        t = "n/a" if c["t_stat"] is None else f"{c['t_stat']:+.2f}"
+        avg = "n/a" if c["avg_r"] is None else f"{c['avg_r']:+.3f}R"
+        print(f"\nCohort {c['cohort']}{' since ' + args.since if args.since else ''}: {c['closed']} closed, "
+              f"{c['wins']} wins, avg {avg}, t {t}, P&L {c['pnl']:.2f}")
     exits = audit.exit_stats(mode=s.mode)
     if exits["measured"]:
         print(f"\nExit management, in multiples of each trade's initial risk (R), over {exits['measured']} measured trade(s):")
@@ -503,6 +509,10 @@ def main() -> int:
     p_out = sub.add_parser("outcomes", help="Record results of closed trades; show P&L by setup and symbol")
     p_out.add_argument("--mark-legacy", action="store_true",
                        help="Tag opens that have no ticket and no result as legacy (they can never be matched), so they stop counting as pending")
+
+    p_out.add_argument("--cohort", choices=["forex-metals", "synthetic", "all"],
+                       help="Also print the R-multiple result for one group of asset classes")
+    p_out.add_argument("--since", metavar="YYYY-MM-DD", help="With --cohort: only trades opened on/after this date")
 
     p_bt = sub.add_parser("backtest", help="Historical backtest using MT5 data")
     p_bt.add_argument("--from",   dest="date_from", metavar="YYYY-MM-DD",

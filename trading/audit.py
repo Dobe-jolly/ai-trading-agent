@@ -289,6 +289,39 @@ class TradeAudit:
             "gave_back": sum(1 for m, f in zip(mfe, fin) if m >= 1 and f < 0),
         }
 
+    COHORTS = {
+        "forex-metals": ("forex", "metals"),
+        "synthetic": ("vol_index", "step", "boom_crash"),
+        "all": ("forex", "metals", "vol_index", "step", "boom_crash"),
+    }
+
+    def cohort_stats(self, cohort: str, mode: Optional[str] = None, since: Optional[str] = None) -> dict:
+        """Result in R of closed trades for one group of asset classes, optionally only trades opened
+        on/after `since` (ISO date). The group is judged on its own: pooling classes hides which one has an edge."""
+        from .study import asset_class
+        if cohort not in self.COHORTS:
+            raise ValueError(f"cohort must be one of {', '.join(self.COHORTS)}")
+        where = "outcome IN ('win','loss','breakeven') AND final_r IS NOT NULL"
+        args: list = []
+        if mode:
+            where += " AND mode=?"
+            args.append(mode)
+        if since:
+            where += " AND created_at >= ?"
+            args.append(since)
+        with self._conn() as conn:
+            rows = conn.execute(f"SELECT symbol, final_r, profit FROM trade_decisions WHERE {where}", args).fetchall()
+        fin = [r["final_r"] for r in rows if asset_class(r["symbol"]) in self.COHORTS[cohort]]
+        pnl = sum(r["profit"] or 0 for r in rows if asset_class(r["symbol"]) in self.COHORTS[cohort])
+        n = len(fin)
+        sd = statistics.stdev(fin) if n >= 2 else 0.0
+        return {
+            "cohort": cohort, "closed": n, "wins": sum(1 for f in fin if f > 0.05),
+            "avg_r": round(statistics.fmean(fin), 3) if n else None,
+            "t_stat": round(statistics.fmean(fin) / (sd / math.sqrt(n)), 2) if sd > 0 else None,
+            "pnl": round(pnl, 2),
+        }
+
     def breakdown(self, by: str, mode: Optional[str] = None) -> list[dict]:
         """Closed-trade results grouped by 'symbol', 'setup' or 'stop_timeframe', best P&L first.
         Trades with no value for the column (older ones) are grouped as '(none)'."""

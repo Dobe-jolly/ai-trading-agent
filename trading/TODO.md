@@ -148,3 +148,10 @@ its next return. That is a daily-bar idea, a different timescale from everything
 - TRADING_MIN_STOP_ATR 1.0 -> 2.0 (replay of 28 closed trades: ~+0.4R, not significant; chosen because stops were swept, not proven).
 - TRADING_MAX_ENTRY_DRIFT=0.3: skip an order if price moved more than 0.3x the stop distance since the model decided (scan lag up to ~2h). Skips show as blocked "stale_entry" with a note in the audit row. Judge forward: compare trades opened before/after this date separately; do not pool.
 - Not done: limit orders at the model level, no-entry-against-24h-move rule, break-even manager (all hypotheses only).
+
+## Cohort rules (written 2026-11-04 before any result; option C chosen)
+- Boom/Crash removed from TRADING_SYMBOLS (3 trades, -1.06R, no tested edge). Volatility and Step stay as a process check only; they are not part of the verdict.
+- Primary cohort: forex + metals, trades opened from the restart date (use --since). View: `python -m trading outcomes --cohort forex-metals --since YYYY-MM-DD`. Pre-change trades are not pooled.
+- Look only at n>=30 forex/metals closed trades. Futility stop at n>=30: avg R < -0.25 and t < -1 -> stop and redesign, do not keep going.
+- Verdict at n>=60: edge if avg R > 0 and t >= 2 (60 trades only detects a true +0.3R; a smaller edge needs ~150, so no result at 60 means "unproven", not "none").
+- No parameter changes inside the cohort; one change = a new cohort with a new date.
