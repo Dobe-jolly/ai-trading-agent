@@ -62,6 +62,7 @@ class Settings:
     max_new_opens_per_scan: int  # new positions allowed in one scan, across all symbols
     max_same_direction: int      # open positions allowed to lean the same way across all symbols (0 = no cap)
     max_synthetic_positions: int # told to the model only; not checked in code
+    max_entry_drift: float       # skip an order if the price moved more than this fraction of the stop distance since the model decided (0 = off)
     min_stop_atr: float          # stop must be at least this many H1 ATRs from entry (0 = no check)
     max_risk_pct: float          # max % of balance per trade
     daily_loss_limit_pct: float          # circuit breaker
@@ -112,6 +113,7 @@ class Settings:
             max_same_direction=_int("MAX_SAME_DIRECTION", 3) or 0,
             max_synthetic_positions=_int("MAX_SYNTHETIC_POSITIONS", 3) or 3,
             min_stop_atr=_float("MIN_STOP_ATR", 1.0) or 0.0,
+            max_entry_drift=_float("MAX_ENTRY_DRIFT", 0.0) or 0.0,
             max_risk_pct=_float("MAX_RISK_PCT", 3.0) or 3.0,
             daily_loss_limit_pct=_float("DAILY_LOSS_LIMIT_PCT", 5.0) or 5.0,
             max_total_risk_pct=_float("MAX_TOTAL_RISK_PCT", 40.0) or 40.0,

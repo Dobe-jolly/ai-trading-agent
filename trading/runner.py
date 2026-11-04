@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import random
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -421,6 +421,14 @@ class TradingRunner:
                              symbol, final.risk_pct, modified.risk_pct, verdict.reason)
                 final = modified
 
+            if final.action == OPEN:
+                stale = self._stale_entry(symbol, final, decision_marks.get(symbol))
+                if stale:
+                    log.info("%s: stale entry → wait: %s", symbol, stale)
+                    summary.blocked["stale_entry"] += 1
+                    guard.notes.append(stale)
+                    final = replace(final, action=WAIT, direction="", sl_pips=0, tp_pips=0)
+
             executed, error, lots, entry_price, sl_price, tp_price, opened_ticket = \
                 self._execute(symbol, final, symbol_info, account)
 
@@ -464,6 +472,22 @@ class TradingRunner:
         self._audit.finish_run(summary.run_id, summary.decided, summary.errors, dict(summary.actions))
         log.info(summary.line())
         return summary
+
+    def _stale_entry(self, symbol: str, decision: TradeDecision, mark) -> str:
+        """Why this order should not go out, or '' if it can. Orders go out up to ~2h after the model
+        decided; if price has moved more than `max_entry_drift` of the stop distance since, the model's
+        entry idea (and the stop it placed against it) no longer describes the trade being opened."""
+        if self.s.max_entry_drift <= 0 or not mark or not decision.sl_pips:
+            return ""
+        info = self._broker.get_symbol_info(symbol)
+        if info is None or info.pip_size <= 0 or not mark[1] or not mark[2]:
+            return ""
+        moved = abs((info.bid + info.ask) / 2 - (mark[1] + mark[2]) / 2) / info.pip_size
+        limit = self.s.max_entry_drift * decision.sl_pips
+        if moved > limit:
+            return (f"price moved {moved:.0f} pips since the decision, more than {self.s.max_entry_drift:g}× "
+                    f"the {decision.sl_pips}-pip stop; the setup is stale")
+        return ""
 
     # ---- execution ---------------------------------------------------------------
 

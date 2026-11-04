@@ -64,6 +64,8 @@ Every playbook is validated in `backtest.py` before it is enabled live.
 - 2026-11-04 entry-quality look at 28 closed trades (descriptive, nothing applied): bot avg final R -0.14 vs +0.20 for random entries with the same symbol, direction, stop and target (diff -0.34, t -1.51; the random baseline carries the recent drift in the bot's mostly-sell direction, 23 sells of 28). 17 of 28 hit the full stop; 10 of 19 losers never got more than 0.25R in favour. Fixed take-profit at 0.5 to 2R never beat the actual exits (so exits are not the leak). Hints to test forward, not rules: entries against the prior 24h move -0.55R (n 15) vs with it +0.35R (n 13), Welch t 2.0 but about 12 splits were looked at; Boom/Crash 0 of 3 (-1.06R); buys 1 of 5; forex 3 trades +0.86R, metals 7 -0.21R, Volatility indices 15 -0.12R (random by construction).
 - [ ] Store the decision time and the quote at decision in the audit (today only the order time is stored, so the 1.6h scan lag and the planned-vs-actual entry cannot be measured).
 - [ ] Pre-register forward tests for the next ~70 trades before changing any rule: (a) forex+metals judged separately from synthetics; (b) no entries against the prior 24h move; (c) Boom/Crash halted; (d) limit orders at the model's level instead of market orders at scan end (needs pending-order support).
+- 2026-11-04 give-back check on 28 closed trades: of 19 losers, 10 never got past +0.25R, 3 reached 0.25-0.5R, 5 reached 0.5-1R, only 1 reached +1R (6 of 15 trades that reached +0.5R ended as losses; 1 of 10 that reached +1R). Replay on real M15 paths vs the replay baseline (-0.287R): break-even after +0.5R +0.16R, after +0.75R +0.09R, after +1R -0.03R; trailing and half-off rules -0.01 to -0.06R. Not significant, 7 rules tried on 28 trades: hypothesis only. Any between-scan stop management would need a small mechanical position manager (the bot only wakes every ~5.6h).
+- [ ] Forward hypothesis (not built): break-even after +0.5R via a no-model position manager running every few minutes; test on the next ~70 trades as its own cohort.
 - [ ] Review again at about 50 closed trades (`python -m trading outcomes`): is the R result settling, which setups and symbols carry it, how much of it is the pre-fix trades. Then at about 100: the verdict (average R above 0 with t >= 2).
 - [ ] At about 100: run Entry-timing parts B and C (entry hours and entry quality vs the placebo).
 
@@ -141,3 +143,8 @@ its next return. That is a daily-bar idea, a different timescale from everything
 ## Dropped
 - Deriv WebSocket and Pandas ingestion: the bot already gets candles through MT5 in plain Python
 - News-fading as a trading strategy: too risky on a small account; only the blackout is kept
+
+## 2026-11-04 changes after the 28-trade review (cohort boundary: trades opened from here on)
+- TRADING_MIN_STOP_ATR 1.0 -> 2.0 (replay of 28 closed trades: ~+0.4R, not significant; chosen because stops were swept, not proven).
+- TRADING_MAX_ENTRY_DRIFT=0.3: skip an order if price moved more than 0.3x the stop distance since the model decided (scan lag up to ~2h). Skips show as blocked "stale_entry" with a note in the audit row. Judge forward: compare trades opened before/after this date separately; do not pool.
+- Not done: limit orders at the model level, no-entry-against-24h-move rule, break-even manager (all hypotheses only).
