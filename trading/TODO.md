@@ -159,3 +159,18 @@ its next return. That is a daily-bar idea, a different timescale from everything
 ## Cohort 2 starts 2026-11-06 (bot restarted after a ~2 day gap with no scans; settings: min stop 2x ATR, stale-entry guard 0.3, Boom/Crash removed). Adopted (not bot-opened) positions are excluded from stats.
 - Pre-change record at restart: 33 measured bot trades, avg -0.17R, t -0.83.
 - Check with: `python -m trading outcomes --cohort forex-metals --since 2026-11-06`; also `--cohort synthetic --since 2026-11-06`.
+
+## Scope: limit-order entries (not built; start only if cohort 2 forex/metals avg R is still negative at n>=30)
+Idea: the model names the price it wants; the bot places a pending buy/sell limit there instead of a market order up to ~2h later. Better price or no trade.
+Current code: `broker/metatrader.py` `place_order` sends only market deals (TRADE_ACTION_DEAL); `_open_trade` in `runner.py` prices SL/TP off the live quote.
+
+Build list
+1. Dry-run check first (no order placed): `order_check` of BUY_LIMIT/SELL_LIMIT with an expiry on one forex, one metal and one Volatility symbol on the Deriv demo. If the server refuses pending orders on a class, that class stays on market orders.
+2. Decision schema: optional `entry_price`; SL/TP pips are measured from it. Guardrails: must be on the correct side of the market (buy below ask, sell above bid), no further than ~1.5x ATR away, spread and stop-ATR checks measured from the limit price.
+3. Broker: `place_limit_order` (type, price, SL, TP, expiry ~ one scan interval + margin, same magic number), `cancel_order`, `get_pending_orders`.
+4. Caps must count pending orders: max positions, one per symbol, same-direction, 40% open-risk cap, per-scan open cap. Otherwise a fill burst breaks the caps.
+5. Audit/outcomes: row state pending -> filled (position ticket via deal lookup) / expired (outcome n/a, kept). `adopt_orphans` and crash recovery must not mis-adopt pending or filled-later orders. Fill rate becomes a reported number.
+6. Tests with a fake mt5: side/distance guardrails, cap counting, expiry, fill matching, no double fills after a restart.
+Estimate: 1-2 days with tests.
+
+Pre-registered evaluation (written now): new cohort 3, same symbols/settings as cohort 2 except entry type. Report fill rate, avg R of filled trades, and avg R per SIGNAL counting unfilled as 0R. Limit orders only count as better if per-signal avg R beats cohort 2 market entries by >=0.1R with the filled-trade R not worse. Warn: limit fills are adverse-selected (they fill most when price is moving against the idea), so avg R of filled trades alone proves nothing; also track the R of the setups that never filled.
