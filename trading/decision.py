@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
+from .chart_reads import CHART_READ_SCHEMA, clean_read
+
 OPEN = "open"
 CLOSE = "close"
 MODIFY = "modify"
@@ -28,6 +30,7 @@ class TradeDecision:
     evidence: list[str] = field(default_factory=list)
     position_ticket: Optional[int] = None  # required for close / modify
     stop_timeframe: str = ""             # H1 | H4 | D1: whose structure the stop is anchored to (required for open)
+    chart_read: Optional[dict] = None    # the model's structured map of the chart (see chart_reads.py); never blocks a decision
 
     @classmethod
     def fallback(cls, reason: str) -> "TradeDecision":
@@ -76,6 +79,7 @@ class TradeDecision:
             evidence=list(evidence),
             position_ticket=int(inp["position_ticket"]) if inp.get("position_ticket") else None,
             stop_timeframe=stop_timeframe,
+            chart_read=clean_read(inp.get("chart_read")),
         )
 
 
@@ -153,6 +157,7 @@ SUBMIT_TRADE_TOOL: dict = {
                 "items": {"type": "string"},
                 "description": "Key facts from your lookups that support this decision (3–6 bullet points).",
             },
+            "chart_read": CHART_READ_SCHEMA,
         },
         "required": ["action", "symbol", "direction", "risk_pct", "sl_pips", "tp_pips", "reason", "confidence", "setup"],
     },

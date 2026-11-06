@@ -10,6 +10,7 @@ Usage:
   python -m trading outcomes                     # record closed-trade results; P&L by setup and symbol
   python -m trading study --timeframe H1         # do regime/sweeps/gaps predict the next N bars?
   python -m trading timing                       # Study A: do equal-level sweeps reverse at particular times of day?
+  python -m trading score-reads                  # score the model's chart reads against later price, then report
   python -m trading playbooks [NAME]             # list playbooks, or replay one on history and judge it
   python -m trading backtest --from 2026-05-01   # backtest from May to today
   python -m trading backtest --list              # list past backtest runs
@@ -401,6 +402,56 @@ def cmd_playbooks(args) -> int:
     return 0
 
 
+def cmd_score_reads(args) -> int:
+    """Score chart reads old enough to have a future, with later H1 candles; then print the report."""
+    s, errors = _load()
+    if errors:
+        for e in errors:
+            log.error(e)
+        return 1
+
+    from datetime import timedelta
+    from trading.chart_reads import MIN_AFTER, ReadStore, base_rates, report, score_read
+    from trading.playbooks.base import atr_series
+
+    store = ReadStore(s.state_db)
+    todo = [] if args.report_only else store.unscored(timedelta(hours=MIN_AFTER + 6))
+    scored_now = 0
+    if todo:
+        from trading.broker.metatrader import MT5Broker, MT5Error
+        broker = MT5Broker()
+        try:
+            broker.connect(s.mt5_login, s.mt5_password, s.mt5_server)
+            cache: dict = {}
+            for row in todo:
+                sym = row["symbol"]
+                if sym not in cache:
+                    data = broker.get_candles(sym, "H1", args.bars)
+                    info = broker.get_symbol_info(sym)
+                    base = None
+                    if len(data) > 200:
+                        atr = atr_series([c.high for c in data], [c.low for c in data], [c.close for c in data])
+                        base = base_rates(data, atr)
+                    cache[sym] = (data, (info.ask - info.bid) if info else 0.0, base)
+                data, spread, base = cache[sym]
+                if base is None:
+                    continue
+                from datetime import datetime
+                created = datetime.fromisoformat(row["created_at"])
+                score = score_read(json.loads(row["read_json"]), data, created, spread, base, seed=row["id"])
+                if score.get("ok"):
+                    store.save_score(row["id"], score)
+                    scored_now += 1
+        except MT5Error as exc:
+            log.error("MT5: %s", exc)
+            return 1
+        finally:
+            broker.disconnect()
+    print(f"{store.count()} read(s) stored, {scored_now} newly scored, {len(todo) - scored_now} too recent or without enough history.\n")
+    print(report(store.scored()))
+    return 0
+
+
 def cmd_summary(args) -> int:
     s, _ = _load()
     if s.mode == "paper":
@@ -506,6 +557,9 @@ def main() -> int:
     p_tm = sub.add_parser("timing", help="Study A: do equal-level sweeps reverse at particular times of day?")
     p_tm.add_argument("--bars", type=int, default=20000, help="H1 history per symbol (default 20000)")
     p_tm.add_argument("--symbols", help="Comma-separated symbols (default: configured forex, metals and Volatility indices)")
+    p_sr = sub.add_parser("score-reads", help="Score the model's chart reads against later price and report")
+    p_sr.add_argument("--bars", type=int, default=2000, help="H1 candles to fetch per symbol (default 2000)")
+    p_sr.add_argument("--report-only", action="store_true", help="Do not connect to MT5; report on reads already scored")
     p_out = sub.add_parser("outcomes", help="Record results of closed trades; show P&L by setup and symbol")
     p_out.add_argument("--mark-legacy", action="store_true",
                        help="Tag opens that have no ticket and no result as legacy (they can never be matched), so they stop counting as pending")
@@ -547,6 +601,8 @@ def main() -> int:
         return cmd_outcomes(args)
     if args.cmd == "timing":
         return cmd_timing(args)
+    if args.cmd == "score-reads":
+        return cmd_score_reads(args)
     if args.cmd == "study":
         return cmd_study(args)
     if args.cmd == "playbooks":

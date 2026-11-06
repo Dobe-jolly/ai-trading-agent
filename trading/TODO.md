@@ -192,3 +192,10 @@ Build list
 Optional extra (later, only if the data says the model's reads are good but its numeric view is the limit): chart images in the prompt. Costs tokens and the model reads numbers well already, so not first.
 Use: the scores decide which setups the model is allowed to trade (a read type with no edge vs placebo is removed from the prompt), and feed entries (limit orders at the model's own marked level).
 Estimate: 1-2 days. Cost: one extra tool call per symbol per scan (small).
+
+### Structured chart read: built 2026-11-06
+- The model fills `chart_read` on every `submit_trade` (also on wait); `ReadStore` keeps it in table `chart_reads` of agent.sqlite. A bad or missing read never blocks a decision or a scan.
+- `python -m trading score-reads` scores reads older than 78h (72 bars of future needed) with H1 candles and prints the report; `--report-only` skips MT5. Checks and placebos are exactly as in `chart_reads.py` header (level touch/hold vs mirrored level, sweep fact check, bias vs symbol base rate, entry idea R vs random market entries).
+- Skill needs n>=30, positive diff over placebo, t>=2 and t>=1.65 on the last 40% of reads. First meaningful report: ~2 weeks of scans (about 20 reads per scan). Do not act on anything earlier.
+- Reads start accumulating from the bot restart after this change; the running scan uses the old schema until restarted.
+- Pre-registered use of the result: a read type that does not beat placebo is removed from the prompt; one that does becomes a candidate rule for a limit-order cohort (entry at the model's marked level).

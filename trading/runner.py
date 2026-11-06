@@ -21,6 +21,7 @@ from typing import Any, Optional
 from agentcore.sdk_backend import build_client
 
 from .audit import TradeAudit
+from .chart_reads import ReadStore
 from .breakers import Lockout, closed_markets, halt_reason, parse_blackouts
 from .broker.metatrader import MT5Broker, Position, SymbolInfo
 from .config import Settings
@@ -63,6 +64,7 @@ class TradingRunner:
         self._broker = MT5Broker()
         self._paper = PaperEngine(settings.paper_db) if settings.mode == "paper" else None
         self._audit = TradeAudit(settings.state_db)
+        self._reads = ReadStore(settings.state_db)
         self._lockout = Lockout(settings.lockout_file)
         self._agent: Optional[MarketAgent] = None
         self._risk_manager: Optional[Any] = None
@@ -354,6 +356,12 @@ class TradingRunner:
                     break
                 continue
 
+            if result.decision.chart_read:
+                try:
+                    self._reads.record(summary.run_id, self.s.mode, symbol, result.decision.chart_read,
+                                       action=result.decision.action)
+                except Exception as exc:  # noqa: BLE001  - a record problem must never stop trading
+                    log.warning("%s: could not store chart read: %s", symbol, exc)
             symbol_info = self._broker.get_symbol_info(symbol)
             decision_marks[symbol] = (datetime.now(timezone.utc),
                                       symbol_info.bid if symbol_info else 0.0,
