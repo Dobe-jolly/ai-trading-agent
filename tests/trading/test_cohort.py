@@ -44,3 +44,12 @@ def test_empty_cohort_and_bad_name(tmp_path):
     assert a.cohort_stats("all")["avg_r"] is None
     with pytest.raises(ValueError):
         a.cohort_stats("nope")
+
+
+def test_adopted_positions_are_left_out_of_totals_and_breakdowns(tmp_path):
+    a = seeded(tmp_path, [("EURUSD", 1.0, 10, "2026-11-01"), ("Range Break 100 Index", 1.0, 500, "2026-11-01")])
+    with sqlite3.connect(tmp_path / "a.sqlite") as c:
+        c.execute("UPDATE trade_decisions SET setup='adopted' WHERE symbol LIKE 'Range%'")
+    s = a.stats(mode="live")
+    assert (s["closed"], s["total_pnl"], s["adopted_not_counted"]) == (1, 10.0, 1)
+    assert [r["key"] for r in a.breakdown("symbol", mode="live")] == ["EURUSD"]

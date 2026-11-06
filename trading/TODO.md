@@ -155,3 +155,7 @@ its next return. That is a daily-bar idea, a different timescale from everything
 - Look only at n>=30 forex/metals closed trades. Futility stop at n>=30: avg R < -0.25 and t < -1 -> stop and redesign, do not keep going.
 - Verdict at n>=60: edge if avg R > 0 and t >= 2 (60 trades only detects a true +0.3R; a smaller edge needs ~150, so no result at 60 means "unproven", not "none").
 - No parameter changes inside the cohort; one change = a new cohort with a new date.
+
+## Cohort 2 starts 2026-11-06 (bot restarted after a ~2 day gap with no scans; settings: min stop 2x ATR, stale-entry guard 0.3, Boom/Crash removed). Adopted (not bot-opened) positions are excluded from stats.
+- Pre-change record at restart: 33 measured bot trades, avg -0.17R, t -0.83.
+- Check with: `python -m trading outcomes --cohort forex-metals --since 2026-11-06`; also `--cohort synthetic --since 2026-11-06`.

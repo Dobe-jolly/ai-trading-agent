@@ -327,7 +327,7 @@ class TradeAudit:
         Trades with no value for the column (older ones) are grouped as '(none)'."""
         if by not in ("symbol", "setup", "stop_timeframe"):
             raise ValueError("by must be 'symbol', 'setup' or 'stop_timeframe'")
-        where = "outcome IN ('win','loss','breakeven')" + (" AND mode=?" if mode else "")
+        where = "outcome IN ('win','loss','breakeven') AND COALESCE(setup,'')!='adopted'" + (" AND mode=?" if mode else "")
         with self._conn() as conn:
             rows = conn.execute(
                 f"SELECT COALESCE({by}, '(none)') AS key, COUNT(*) AS closed, "
@@ -362,6 +362,12 @@ class TradeAudit:
         where = "final_action='open'" + (" AND mode=?" if mode else "")
         args = (mode,) if mode else ()
         with self._conn() as conn:
+            # Positions the bot found on the account but did not open (setup 'adopted') are not its trades:
+            # they are kept in the table but left out of every count and P&L figure below.
+            adopted = conn.execute(
+                f"SELECT COUNT(*) FROM trade_decisions WHERE {where} AND setup='adopted'", args
+            ).fetchone()[0]
+            where += " AND COALESCE(setup,'')!='adopted'"
             totals = conn.execute(
                 "SELECT COUNT(*) AS n, "
                 "SUM(CASE WHEN outcome='open' THEN 1 ELSE 0 END) AS still_open, "
@@ -392,6 +398,7 @@ class TradeAudit:
             "opens": totals["n"] or 0,
             "closed": closed,
             "no_result_yet": no_result,          # still open (opens with no ticket are tagged legacy, see mark_legacy_opens)
+            "adopted_not_counted": adopted,      # found on the account, not opened by the bot
             "legacy_unresolvable": legacy,       # opened before tickets were recorded; excluded from the counts above
             "wins": wins,
             "losses": losses,
