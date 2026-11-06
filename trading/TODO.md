@@ -174,3 +174,21 @@ Build list
 Estimate: 1-2 days with tests.
 
 Pre-registered evaluation (written now): new cohort 3, same symbols/settings as cohort 2 except entry type. Report fill rate, avg R of filled trades, and avg R per SIGNAL counting unfilled as 0R. Limit orders only count as better if per-signal avg R beats cohort 2 market entries by >=0.1R with the filled-trade R not worse. Warn: limit fills are adverse-selected (they fill most when price is moving against the idea), so avg R of filled trades alone proves nothing; also track the R of the setups that never filled.
+
+## Scope: structured chart read (not built; independent of the limit-order work)
+Why: the model already reads charts discretionarily (liquidity sweeps, trend, ranges) but only the final trade is scored, ~1 per 4 symbols. Prose reasons can't be checked against price. If the model writes its map as data on EVERY symbol it analyses (trade or not), each scan yields ~20 scoreable reads instead of ~5 trades, so we learn which of its reads are real in days, not months.
+
+Build list
+1. Add a `submit_chart_read` call (separate from `submit_trade`, required before the decision) with fields: bias (up/down/range), timeframe read, `levels` [{type: liquidity_high|liquidity_low|fvg|order_block|major_level, price, side, note}], `sweep` (which level, up/down, when), `entry_idea` {price, invalidation, target} or none, confidence. Store as JSON in a new `chart_reads` table keyed by run_id + symbol + created_at (additive migration, like the existing columns).
+2. Prompt: ask for the read from what it actually sees, no required strategy; "nothing clear" is a valid read.
+3. Scoring job `python -m trading score-reads`, run on reads older than N hours using later candles (no model call). Pre-defined checks, written now:
+   - Level touched within 24h (yes/no) and distance travelled before touch, in ATR.
+   - Level held vs broken on first touch (held = closes back on the original side within 3 bars).
+   - Claimed sweep: did price actually trade through the level and close back inside within 3 bars of the claimed time (verifies the claim itself, not just what came after).
+   - Bias: did the next 12 H1 bars close in the stated direction, vs the base rate of that symbol (drift-adjusted).
+   - Entry idea: reached? If reached, did target hit before invalidation (R result, spread-adjusted)?
+4. Report by read type, class and timeframe, with n, hit rate vs a placebo (same checks on random levels/prices on the same symbol) and the usual t >= 2 / out-of-sample-last-40% discipline. A read type only counts as skill if it beats the placebo.
+5. Tests: scoring functions on hand-built candle fixtures (touch, hold, break, false sweep claim), prompt/schema round-trip, migration on an old database.
+Optional extra (later, only if the data says the model's reads are good but its numeric view is the limit): chart images in the prompt. Costs tokens and the model reads numbers well already, so not first.
+Use: the scores decide which setups the model is allowed to trade (a read type with no edge vs placebo is removed from the prompt), and feed entries (limit orders at the model's own marked level).
+Estimate: 1-2 days. Cost: one extra tool call per symbol per scan (small).
