@@ -11,6 +11,7 @@ Usage:
   python -m trading study --timeframe H1         # do regime/sweeps/gaps predict the next N bars?
   python -m trading timing                       # Study A: do equal-level sweeps reverse at particular times of day?
   python -m trading study-b                      # Study B: D1 time-series momentum (rules in PLAYBOOKS.md)
+  python -m trading study-metals-trend           # Study C: metals long-biased D1 trend sleeve (PLAYBOOKS.md)
   python -m trading score-reads                  # score the model's chart reads against later price, then report
   python -m trading playbooks [NAME]             # list playbooks, or replay one on history and judge it
   python -m trading backtest --from 2026-05-01   # backtest from May to today
@@ -367,6 +368,47 @@ def cmd_study_b(args) -> int:
     return 0
 
 
+
+def cmd_study_metals_trend(args) -> int:
+    """Study C: metals long-biased D1 trend sleeve (rules fixed in PLAYBOOKS.md before any result)."""
+    from trading.metals_trend import load_candles, run
+
+    settings = None
+    if args.source in ("auto", "mt5"):
+        s, errors = _load()
+        if errors and args.source == "mt5":
+            for e in errors:
+                log.error(e)
+            return 1
+        if not errors:
+            settings = s
+        else:
+            log.info("MT5 settings incomplete; using Yahoo GC=F / SI=F")
+
+    try:
+        candles, spreads, source = load_candles(
+            source=args.source, years=args.years, bars=args.bars, settings=settings,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.error("Could not load D1 metals history: %s", exc)
+        return 1
+    if not candles:
+        log.error("No metals D1 history loaded.")
+        return 1
+    for sym, data in sorted(candles.items()):
+        log.info("%s: %d D1 bars (%s to %s) spread=%.6g",
+                 sym, len(data), data[0].time.date(), data[-1].time.date(), spreads.get(sym, 0.0))
+
+    report = run(candles, spreads, seed=args.seed, data_source=source)
+    print(report.text())
+    out_dir = Path("trading/state")
+    if settings is not None:
+        out_dir = settings.state_db.parent
+    else:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\nFull results: {report.save(out_dir)}")
+    return 0 if report.verdict == "PASS" else 1
+
 def cmd_study(args) -> int:
     """Test whether regime, sweeps, gaps and breaks predict the next N bars on historical candles."""
     s, errors = _load()
@@ -642,7 +684,14 @@ def main() -> int:
     p_sb.add_argument("--years", type=int, default=20, help="Yahoo history in years (default 20)")
     p_sb.add_argument("--symbols", help="Comma-separated symbols (default: Study B forex, metals, Volatility)")
     p_sb.add_argument("--seed", default="0", help="Placebo seed (default 0)")
-    p_sr = sub.add_parser("score-reads", help="Score the model's chart reads against later price and report")
+p_smt = sub.add_parser("study-metals-trend",
+                           help="Study C: metals long-biased D1 trend sleeve (rules fixed in PLAYBOOKS.md)")
+    p_smt.add_argument("--source", choices=("auto", "mt5", "yahoo"), default="auto",
+                       help="D1 data source (default auto: MT5 if configured, else Yahoo GC=F/SI=F)")
+    p_smt.add_argument("--bars", type=int, default=5000, help="MT5 D1 bars per symbol (default 5000)")
+    p_smt.add_argument("--years", type=int, default=20, help="Yahoo history in years (default 20)")
+    p_smt.add_argument("--seed", default="0", help="Placebo seed (default 0)")
+        p_sr = sub.add_parser("score-reads", help="Score the model's chart reads against later price and report")
     p_sr.add_argument("--bars", type=int, default=2000, help="H1 candles to fetch per symbol (default 2000)")
     p_sr.add_argument("--report-only", action="store_true", help="Do not connect to MT5; report on reads already scored")
     p_out = sub.add_parser("outcomes", help="Record results of closed trades; show P&L by setup and symbol")
@@ -692,6 +741,8 @@ def main() -> int:
         return cmd_study(args)
     if args.cmd == "study-b":
         return cmd_study_b(args)
+    if args.cmd == "study-metals-trend":
+        return cmd_study_metals_trend(args)
     if args.cmd == "playbooks":
         return cmd_playbooks(args)
 
