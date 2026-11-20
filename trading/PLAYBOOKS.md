@@ -564,6 +564,73 @@ Command: `python -m trading study-carry --seed 0`. Spots: Yahoo D1. Rates: OECD 
 Failed: avg R not > 0; t < 3; did not beat placebo by ≥0.05 R. Always-long diagnostic not run (no PASS). **CANDIDATES: none.** Sleeve shelved; no retune; survivors unchanged. Details: project store `docs/study-fx-carry-results.md`.
 
 
+## Study D: Cross-asset risk-on/off (equity → FX). Rules written 2026-11-20, before any result
+
+When equities rise, risk appetite often lifts AUD/NZD and weighs on JPY/CHF; when equities fall, the reverse.
+This tests whether a **lagged equity return** predicts short FX moves on classic risk pairs — a different
+economic idea from structure rules, Study B TSMOM (FAIL), and Study C carry (FAIL). Not wired into the
+live agent unless it PASSes and is later added to survivors.
+
+### Why a dedicated returns simulator
+Fixed-hold ATR-unit path (same family as Study B/C). **Jump-stops:** N/A (no stop). **Boom/Crash drift
+placebo:** N/A (forex only). Same numerical Phase-0 gate (n, t, OOS, beat random placebo by ≥0.05 R).
+After a PASS only: beat an **always-risk-on** diagnostic (ignore equity; always take the risk-on FX side)
+by ≥0.05 R full-sample and OOS — so a permanent risk-on bias is not mistaken for equity timing. Cannot
+rescue a FAIL.
+
+### Rule (one variant, registered now — not chosen after the run)
+| Name | Equity lookback L | Hold H | Signal |
+|---|---|---|---|
+| `eqrisk_21_5` | 21 D1 bars | 5 D1 bars | sign of S&P 500 total close-to-close return over L |
+
+- **Timeframe:** D1. **Market:** forex only (one cell). Metals not in this study.
+- **Equity index:** Yahoo `^GSPC` (S&P 500 cash). Fallback if needed: `SPY` (same lag rules). Source recorded.
+- **Equity signal at bar t:** `s = sign(close_eq[t] / close_eq[t−L] − 1)`. Skip if missing history or s = 0.
+  No lookahead: only closes through t.
+- **FX pairs and risk-on direction** (buy the pair = +1 when risk-on; risk-off flips the sign):
+
+  | Pair | Risk-on dir | Rationale (registered, not tuned) |
+  |---|---|---|
+  | AUDUSD | +1 | AUD risk currency vs USD |
+  | NZDUSD | +1 | NZD risk currency vs USD |
+  | USDJPY | +1 | risk-on sells JPY → USDJPY up |
+  | USDCHF | +1 | risk-on sells CHF → USDCHF up |
+  | EURJPY | +1 | risk-on EUR vs safe JPY |
+
+- **Trade rule:** if equity s > 0 → risk-on dirs; if s < 0 → opposite dirs. Every listed pair that has a
+  candle on that calendar date is traded (one trade per pair per signal date).
+- **Entry** at the open of FX bar t+1 (matched by calendar date to equity bar t). **Exit** at the close
+  of FX bar t+H. One trade at a time per symbol (next signal after that symbol’s exit).
+- **Calendar align:** equity and FX must share the signal date t; if FX has no bar on t or t+1…t+H,
+  skip that pair for that signal (no forward-fill of FX).
+- **Result in ATR units** at FX bar t (Wilder 14):  
+  `r = direction × (exit − entry) / ATR − spread / ATR − overnight`  
+  where `overnight = 0.015 × H` (same registered ATR/day drag as Study B for multi-day FX holds).
+- **Costs:** one full static spread (from `backtest._SPREAD_PIPS × point` on Yahoo) + overnight as above.
+- **Placebo:** same entry bars / hold / costs, **random** ±1 direction per trade. Seed `0`, one run.
+- **Gate (forex cell), all at once:** ≥100 trades; avg R > 0; t ≥ 3; OOS ≥40 trades, avg > 0, t ≥ 1.65;
+  beat random placebo by ≥0.05 R. Identical thresholds to Phase 0.
+- **Always-risk-on diagnostic (only if PASS):** same entries/holds/costs but direction always the risk-on
+  column. Candidate only if real beats it by ≥0.05 R full and OOS. Cannot rescue a FAIL.
+- **Sample caveat:** pairs share USD/JPY risk factors and a single equity driver — pooled t overstates
+  independence; report per-symbol averages and discount the pooled t.
+- **Data source:** Yahoo D1 for equity and FX (`AUDUSD=X`, …). Prefer MT5 FX if available; source recorded.
+- **History:** as much overlap as loads (~20y Yahoo).
+- **Honest expectation:** equity→FX risk transmission is noisy after costs on D1; a FAIL shelves the idea.
+
+### Procedure
+One run: `python -m trading study-eqrisk --seed 0`. No parameter changes after seeing the result. 1 real cell.
+
+### Result (run 2026-11-20, after the rules above were fixed)
+Command: `python -m trading study-eqrisk --seed 0`. Equity: Yahoo `^GSPC`. FX: Yahoo D1 five risk pairs.
+
+| Cell | n | Win% | Avg R | t | OOS avg (t) | Placebo | Verdict |
+|---|---|---|---|---|---|---|---|
+| forex `eqrisk_21_5` | 4146 | 46.2 | **-0.110** | -5.41 | **-0.085** (−2.96) | -0.106 | **FAIL** |
+
+Failed: avg/OOS avg not > 0; t and OOS t below bars; did not beat placebo by ≥0.05 R. Always-risk-on diagnostic not run (no PASS). **CANDIDATES: none.** Shelved; no retune; survivors unchanged. Details: project store `docs/study-equity-riskon-fx-results.md`.
+
+
 ## Outline of later phases (to be written out fully, and approved, before they are built)
 
 - **Delta, Epsilon:** now written out in Phase 3 above.
@@ -573,3 +640,4 @@ Failed: avg R not > 0; t < 3; did not beat placebo by ≥0.05 R. Always-long dia
 - **Study B:** rules above; implementation in `trading/momentum.py`.
 - **Study C (metals trend):** rules above; implementation in `trading/metals_trend.py`.
 - **Study C (FX carry):** rules above; implementation in `trading/carry.py`.
+- **Study D (equity→FX risk-on/off):** rules above; implementation in `trading/eqrisk.py`.
