@@ -431,6 +431,75 @@ What the numbers say, without chasing them:
 
 JSON artifact from the run: `trading/state/study_b_20261120T135725.json`.
 
+## Study C: metals trend sleeve (long-biased D1). Rules written 2026-11-20, before any result
+
+Context: Study B's metals cells showed a long-biased **always-long** sleeve earning more than TSMOM timing. This study asks
+whether a **registered** D1 trend filter (long when above a slow average, otherwise flat — never short) is itself an edge
+after costs, under the upgraded gate discipline (realism in the first pass, not as a follow-up).
+
+It is a **slow metals sleeve**, not part of the intraday agent. One variant, one run, no tuning after results.
+
+### Why not the stop/target playbook machine
+A multi-week trend hold is not a stop/target trade. Study C uses a fixed-hold ATR-unit simulator (`trading/metals_trend.py`),
+same family as Study B's returns path. **Jump-stops:** N/A (no stop). **Drift analogue (in the first gate, not after a
+PASS):** an **always-long** sleeve with the same hold and costs — metals have no Boom/Crash name-drift, but a bull sample
+must not be mistaken for filter skill. Random-long placebo (same entry rate) is also required.
+
+### Variant (fixed now)
+| Name | Filter | Hold H | Bias |
+|---|---|---|---|
+| `metals_trend_200` | close[t] > SMA of the last 200 closes including t | 21 D1 bars | long or flat only (never short) |
+
+### Signal and trade
+- **Timeframe:** D1. **Markets:** metals only — XAUUSD and XAGUSD, one cell (`metals`).
+- **Warmup:** 200 bars for the SMA (+ ATR needs 14; use warmup 214).
+- **Signal** at close of bar t: if `close[t] > mean(closes[t-199 .. t])` → long; else no trade (flat).
+- **Entry** at the open of bar t+1. **Exit** at the close of bar t+H (H = 21).
+- **One trade at a time** per symbol; next signal sought after exit (non-overlapping).
+- **Result in ATR units** at t (Wilder 14): +1 × (exit − entry) / ATR(t) − costs (longs only).
+- **Costs (pessimistic, fixed):** one full spread per trade + `SWAP_ATR_PER_DAY × H` with
+  `SWAP_ATR_PER_DAY = 0.015` on metals (same registered drag as Study B). When MT5 is unavailable, static spreads
+  from `backtest.py` (`XAUUSD` 0.30, `XAGUSD` 0.03 price units).
+- **No lookahead:** SMA ends at t; entry uses only the next open.
+
+### Placebos and gate (first pass — both required)
+- **Random-long placebo:** at the same entry rate as the rule on each symbol, enter **long** at random bars (not
+  conditioned on the SMA), same hold and costs. Seed `0`.
+- **Always-long sleeve:** on every free rebalance bar (same calendar walk as the rule: after each exit, next bar is
+  eligible), always go long with the same hold and costs — no SMA filter.
+- **Gate (one metals cell), all at once:**
+  ≥100 trades; average ATR-return > 0; t ≥ 3; out of sample ≥40 trades, average > 0, t ≥ 1.65;
+  beat the random-long placebo by ≥ 0.05 ATR;
+  **and** beat always-long by ≥ 0.05 ATR in the full sample **and** out of sample.
+  A FAIL on always-long means "bull drift, not filter" and shelves the sleeve. Nothing is retuned.
+
+### Data source (registered)
+Prefer MT5 D1 for XAUUSD/XAGUSD. If MT5 is unavailable: Yahoo Finance daily via `GC=F` / `SI=F` as liquid proxies
+(same mapping used for Study B when MT5 was down). Source recorded on the report. Aim ≥ 10 years of D1; OOS = last 40%
+of each symbol's bars.
+
+### Procedure
+- One run: `python -m trading study-metals-trend --seed 0`. No parameter changes after seeing a result.
+- **PASS** → candidate slow sleeve (still not auto-wired; survivors allowlist is a separate decision).
+- **FAIL** → shelved as written. Honest expectation: always-long may absorb most of any bull-sample gain; the filter
+  must prove it adds something after costs.
+
+### Machine check
+Unit tests: planted uptrend with occasional drops → filter PASSes vs random and always-long; pure random walk FAILs.
+
+### Study C results (run once on 2026-11-20; rules and gate as approved above, seed 0)
+Yahoo D1 `GC=F` / `SI=F` (~5,028 bars each, 2006-11 → 2026-11); spreads 0.30 / 0.03; overnight drag 0.015 ATR/day × 21.
+Artifact: `trading/state/study_metals_trend_20261120T143720.json`.
+
+| Sleeve | n | Win% | Avg ATR | t | OOS avg (t) | vs always-long |
+|---|---|---|---|---|---|---|
+| trend_200 | 305 | 44.9 | +0.381 | +1.37 | +0.786 (+1.83) | +0.189 (+0.070 OOS) |
+| random_long | 303 | 47.2 | +0.170 | +0.69 | +0.453 (+1.16) | — |
+| always_long | 436 | 49.5 | +0.192 | +0.92 | +0.716 (+2.15) | — |
+
+**VERDICT: FAIL** — full-sample t +1.37 is below 3.0. The filter cleared the always-long and random-long margins and OOS avg/t bars, but not significance on the full sample. **Shelved as written. No retune. Survivors allowlist unchanged.**
+
+
 ## Outline of later phases (to be written out fully, and approved, before they are built)
 
 - **Delta, Epsilon:** now written out in Phase 3 above.
@@ -438,3 +507,4 @@ JSON artifact from the run: `trading/state/study_b_20261120T135725.json`.
   this machine as ordinary playbooks if you want the question closed with stops and targets included, which the earlier
   fixed-horizon study did not have.
 - **Study B:** rules above; implementation in `trading/momentum.py`.
+- **Study C (metals trend):** rules above; implementation in `trading/metals_trend.py`.

@@ -1,0 +1,61 @@
+{
+ "data_source": "yahoo_gc_si_futures",
+ "verdict": "FAIL",
+ "failed": [
+  "t +1.37 is below 3.0"
+ ],
+ "notes": [
+  "Long-biased only (never short).",
+  "Overnight drag 0.015 ATR/day \u00d7 21 on metals.",
+  "Always-long is in the first gate (metals drift analogue of Boom/Crash drift placebo)."
+ ],
+ "symbols": [
+  "XAUUSD",
+  "XAGUSD"
+ ],
+ "per_symbol": {
+  "XAUUSD": [
+   163,
+   0.443
+  ],
+  "XAGUSD": [
+   142,
+   0.311
+  ]
+ },
+ "real": {
+  "n": 305,
+  "wins": 137,
+  "avg_r": 0.3813068669265238,
+  "t": 1.365248571627226,
+  "total_r": 116.29859441258976,
+  "n_oos": 147,
+  "avg_r_oos": 0.7863348753343637,
+  "t_oos": 1.832109248591019
+ },
+ "placebo": {
+  "n": 303,
+  "wins": 143,
+  "avg_r": 0.17007029346016042,
+  "t": 0.6891790843838072,
+  "total_r": 51.531298918428604,
+  "n_oos": 128,
+  "avg_r_oos": 0.45261629530574216,
+  "t_oos": 1.1612329944932682
+ },
+ "always_long": {
+  "n": 436,
+  "wins": 216,
+  "avg_r": 0.19212569613506777,
+  "t": 0.9207191227411442,
+  "total_r": 83.76680351488955,
+  "n_oos": 180,
+  "avg_r_oos": 0.7163205767387473,
+  "t_oos": 2.153204317351726
+ },
+ "params": {
+  "sma": 200,
+  "hold": 21,
+  "swap_atr_per_day": 0.015
+ }
+}
