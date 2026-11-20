@@ -111,6 +111,13 @@ its next return. That is a daily-bar idea, a different timescale from everything
 - Open question remains: a pass would not feed the current intraday agent (daily-loss lockout / scan cadence). Wire only as a separate slow sleeve if accepted.
 - Note the paper's own caveats: higher-frequency trend signals add little after costs, the reversal side depends on the market, and its headline benefit is drawdown reduction (being in cash), not extra return.
 
+## Study D: equity → FX risk-on/off (added 2026-11-20)
+Lagged S&P 500 21D sign → fixed risk-on FX map (AUD/NZD/USDJPY/USDCHF/EURJPY), hold 5 D1, spread + 0.015 ATR/day overnight, placebo + OOS.
+- [x] Rules pre-registered in PLAYBOOKS.md **before** the run.
+- [x] Implemented `trading/eqrisk.py` + `python -m trading study-eqrisk`; tests in `tests/trading/test_eqrisk.py`.
+- [x] One run seed 0: forex cell **FAIL** (n=4146, avg R −0.110, t −5.41; OOS −0.085 t −2.96; placebo −0.106). No retune. Survivors untouched.
+- Results: project store `docs/study-equity-riskon-fx-results.md`.
+
 ## Phase 5: Playbooks (one module each, each backtested per asset class)
 **Now run in phases, see [PLAYBOOKS.md](PLAYBOOKS.md): rules and gate are fixed before any result exists.**
 - [x] Phase 0: the test machine (`trading/playbooks/`: interface, replay simulator with pessimistic fills and costs, placebo, pre-registered gate, lookahead checker, `python -m trading playbooks`). Proven first: finds a planted edge, rejects a random walk and a reversed rule, and costs can eat an edge (230 trading tests pass)
