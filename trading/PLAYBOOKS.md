@@ -631,6 +631,99 @@ Command: `python -m trading study-eqrisk --seed 0`. Equity: Yahoo `^GSPC`. FX: Y
 Failed: avg/OOS avg not > 0; t and OOS t below bars; did not beat placebo by ≥0.05 R. Always-risk-on diagnostic not run (no PASS). **CANDIDATES: none.** Shelved; no retune; survivors unchanged. Details: project store `docs/study-equity-riskon-fx-results.md`.
 
 
+## Study D: vol-targeted trend on liquid futures. Rules written 2026-11-20, before any result
+
+Context: Study B's unit-size D1 TSMOM failed on forex/metals after overnight drag. The classic CTA / TSMOM
+literature result is on **liquid futures** with **volatility targeting** (size ∝ target_vol / realized_vol), not
+unit FX. This study asks whether that registered sleeve clears the upgraded first-pass gate (placebo + OOS +
+drift analogue) on continuous futures proxies.
+
+It is a **slow multi-asset sleeve**, not part of the intraday agent. **One variant, one run, no tuning after results.**
+
+### Why not the stop/target playbook machine
+Same reason as Studies B/C: a multi-week trend hold is not a stop/target trade. Study D uses a fixed-hold
+ATR-unit simulator (`trading/vol_futures_trend.py`). **Jump-stops:** N/A (no stop). **Drift analogue (in the
+first gate):** an **always-long** sleeve with the **same** vol weights, hold, and costs — a risk-on book must not
+be mistaken for trend skill across a mostly upward equity/commodity sample.
+
+### Universe (fixed now)
+Ten liquid Yahoo Finance continuous front-month futures (`=F` proxies). Prefer these when MT5 is unavailable
+(registered default path). Symbols:
+
+| Id | Yahoo | Role |
+|---|---|---|
+| ES | `ES=F` | Equity index |
+| NQ | `NQ=F` | Equity index |
+| ZN | `ZN=F` | Rates (10Y) |
+| CL | `CL=F` | Energy |
+| GC | `GC=F` | Precious metal |
+| SI | `SI=F` | Precious metal |
+| HG | `HG=F` | Industrial metal |
+| 6E | `6E=F` | FX (EUR) |
+| 6J | `6J=F` | FX (JPY) |
+| ZC | `ZC=F` | Agriculture |
+
+**Data caveat (registered):** Yahoo continuous futures are not professional back-adjusted series; rolls can
+inject gaps. The study documents the source on the report and does not retune around roll artifacts. Aim ≥ 10
+years of D1; OOS = last 40% of each symbol's bars. One pooled cell (`futures`).
+
+### Variant (fixed now — one only)
+| Name | Lookback L | Skip S | Hold H | Vol window | Target vol (ann.) | Max weight |
+|---|---|---|---|---|---|---|
+| `vol_tsmom_12_1` | 252 D1 bars | 21 | 21 | 63 | 0.10 | 2.0 |
+
+Classic 12-1 sign with 63-day realized vol scaling. No second variant (no peek-then-pick).
+
+### Signal, size, trade
+- **Warmup:** L + S + max(14, vol_window) bars.
+- **Signal** at close of bar t: `ret = close[t−S] / close[t−S−L] − 1`. Direction = +1 if ret > 0, −1 if ret < 0;
+  if ret == 0 or vol undefined, no trade.
+- **Realized vol** σ_ann = sample stdev of log(close[i]/close[i−1]) over the last 63 closes ending at t, times √252.
+  If σ_ann ≤ 1e−8, skip.
+- **Weight** w = min(2.0, 0.10 / σ_ann).
+- **Entry** at the open of bar t+1. **Exit** at the close of bar t+H. One trade at a time per symbol
+  (non-overlapping); next signal after exit.
+- **Result in ATR units** at t (Wilder 14):
+  `R = direction × w × (exit − entry) / ATR(t) − cost`.
+- **Costs (pessimistic, fixed):** `cost = w × (spread / ATR) + FUTURES_FRICTION_ATR` with
+  `FUTURES_FRICTION_ATR = 0.05` (commission + slip buffer; no FX-style overnight swap on this futures path).
+  Static spreads in price units (registered): ES 0.25, NQ 0.50, ZN 0.015625, CL 0.02, GC 0.10, SI 0.005,
+  HG 0.0005, 6E 0.00005, 6J 0.0000005, ZC 0.25.
+
+### Placebos and gate (first pass — both required)
+- **Random-direction placebo:** same entry bars and **same weights** as the rule; direction ±1 at random. Seed `0`.
+- **Always-long sleeve:** same calendar walk and vol weights; direction always +1.
+- **Gate (one `futures` cell), all at once:**
+  ≥100 trades; average ATR-return > 0; t ≥ 3; out of sample ≥40 trades, average > 0, t ≥ 1.65;
+  beat the random-direction placebo by ≥ 0.05 ATR;
+  **and** beat always-long by ≥ 0.05 ATR in the full sample **and** out of sample.
+  A FAIL shelves the sleeve. Nothing is retuned. Survivors allowlist changes **only on PASS**.
+
+### Procedure
+- One run: `python -m trading study-vol-futures-trend --seed 0`. No parameter changes after seeing a result.
+- **PASS** → candidate slow sleeve (still not auto-wired; allowlist is a separate decision).
+- **FAIL** → shelved as written. Honest expectation: unit TSMOM already failed after costs; vol targeting may
+  improve risk balance but is not assumed to clear t ≥ 3 on Yahoo continuous data.
+
+### Machine check
+Unit tests: planted trending series with both up and down legs → rule PASSes vs random and always-long;
+pure random walk FAILs.
+
+### Study D results (run once on 2026-11-20; rules and gate as approved above, seed 0)
+Yahoo continuous futures (`ES=F` `NQ=F` `ZN=F` `CL=F` `GC=F` `SI=F` `HG=F` `6E=F` `6J=F` `ZC=F`),
+~5,020–5,030 D1 bars each (2006-11 → 2026-11); friction 0.05 ATR/trade + weight×spread/ATR.
+Artifact: `trading/state/study_vol_futures_trend_20261120T151558.json`.
+
+| Sleeve | n | Win% | Avg ATR | t | OOS avg (t) | vs always-long |
+|---|---|---|---|---|---|---|
+| vol_tsmom_12_1 | 2,126 | 50.7 | +0.043 | +0.60 | +0.030 (+0.26) | +0.100 (+0.039 OOS) |
+| random_dir | 2,126 | 49.2 | -0.045 | -0.63 | +0.124 (+1.06) | — |
+| always_long | 2,126 | 52.5 | -0.057 | -0.80 | -0.009 (-0.08) | — |
+
+**VERDICT: FAIL** — t +0.60 and OOS t +0.26 miss the bars; OOS vs always-long only +0.039. Near-zero after friction.
+**Shelved as written. No retune. Survivors allowlist unchanged.**
+
+
 ## Outline of later phases (to be written out fully, and approved, before they are built)
 
 - **Delta, Epsilon:** now written out in Phase 3 above.
@@ -641,3 +734,4 @@ Failed: avg/OOS avg not > 0; t and OOS t below bars; did not beat placebo by ≥
 - **Study C (metals trend):** rules above; implementation in `trading/metals_trend.py`.
 - **Study C (FX carry):** rules above; implementation in `trading/carry.py`.
 - **Study D (equity→FX risk-on/off):** rules above; implementation in `trading/eqrisk.py`.
+- **Study D (vol futures trend):** rules above; implementation in `trading/vol_futures_trend.py`.
