@@ -335,9 +335,106 @@ so the machine raised no alarm. Average excess in ATRs in the sweep's direction 
 **Conclusion: no time of day makes a liquidity sweep a reliable reversal signal on H1 forex or metals.** The sweep playbook (Zeta) stays on hold. This closes TODO "Entry timing" part A. Parts B and C (the
 bot's own entry hours, and entry quality) wait for the demo run to reach about 100 closed trades.
 
+## Study B: daily time-series momentum (slow sleeve). Rules written 2026-11-20, before any result
+
+From TODO "Study B". Everything tested so far was H1/H4 structure or mean reversion and failed. This is a different
+timescale: an asset's own past return predicting its next return (Moskowitz, Ooi and Pedersen style time-series momentum).
+It is a **separate slow sleeve**, not part of the intraday agent. Same discipline as Phases 1–3 and Study A: rules and
+gate fixed here, one run, no tuning after seeing results.
+
+### Why a returns-based test (not the stop/target playbook machine)
+A monthly hold is not a stop/target trade. Forcing a wide ATR stop through `playbooks/simulate.py` would cut paths that
+the literature rule would hold, so Study B uses a dedicated fixed-hold simulator (`trading/momentum.py`). Jump-stops do
+not apply (there is no stop). The realism analogues are: **one spread + overnight cost per hold**, a **random-direction
+placebo** at the same entry rate, and — if a real cell passes — an **always-long diagnostic** (same hold and costs) so a
+bull market is not mistaken for timing skill (the Drift-placebo lesson from Delta).
+
+### Variants (both registered now; neither is chosen after the run)
+| Name | Lookback L | Skip S | Hold H | Idea |
+|---|---|---|---|---|
+| `tsmom_12_1` | 252 D1 bars (~12 months) | 21 (~1 month) | 21 | Classic 12-1: return from t−S−L to t−S; skip the most recent month |
+| `tsmom_63` | 63 D1 bars (~3 months) | 0 | 21 | Shorter lookback, stated in advance; not a fallback if 12-1 fails |
+
+### Signal and trade (identical for both variants)
+- **Timeframe:** D1. Signal at the close of bar t (needs t ≥ L+S and ATR at t).
+- **Past return** = close[t−S] / close[t−S−L] − 1. Buy if > 0, sell if < 0, skip if == 0.
+- **Entry** at the open of bar t+1. **Exit** at the close of bar (t+H) — H calendar trading bars after the signal bar.
+- **One trade at a time per symbol.** After exit, the next signal is sought on later bars (non-overlapping).
+- **Result in ATR units** at the signal bar: direction × (exit − entry) / ATR(t), minus costs. ATR is Wilder's 14-bar ATR.
+- **Costs (pessimistic, fixed before the run):** one full spread per trade, plus `SWAP_ATR_PER_DAY × H` with
+  `SWAP_ATR_PER_DAY = 0.015` on forex and metals (about 1.5% of a day's range per overnight × 21 ≈ 0.315 ATR drag),
+  and `0` on the Volatility control. When MT5 swap fields are available they are **not** substituted in this first run —
+  the fixed drag is the registered cost so the result is not fitted to broker quirks. A pass must clear that drag.
+- **No lookahead:** the return window ends at t−S (or t when S=0); entry uses only the next open.
+
+### Markets and cells
+- **Real:** forex (9 pairs: EURUSD, GBPUSD, USDJPY, USDCHF, AUDUSD, NZDUSD, USDCAD, EURJPY, EURGBP) and metals
+  (XAUUSD, XAGUSD), each a separate class. 2 variants × 2 classes = **4 real cells**.
+- **Negative control:** Volatility indices (random by construction) as class `vol_index`. Prefer live Deriv symbols from
+  MT5 when connected; otherwise five seeded constant-vol random walks labelled as the control (same pipeline). A control
+  PASS is a machine fault — nothing is acted on. 2 control cells.
+- **Data source (registered):** prefer MT5 D1. If MT5 is unavailable, Yahoo Finance daily (`EURUSD=X` …; metals via
+  `GC=F` / `SI=F` as liquid proxies for XAUUSD/XAGUSD). The source used is recorded on the report. Spreads: current
+  mid-market width when MT5 is up; otherwise the static price spreads already used in `backtest.py` (`_SPREAD_PIPS`).
+- **History:** as much D1 as the source gives (aim ≥ 10 years on majors). OOS = last 40% of each symbol's bars.
+- **Sample caveat (stated now):** the 9 forex pairs share a dollar factor, so effective independent bets are fewer than
+  trade count. The report prints per-symbol averages and reminds the reader to discount the pooled t-stat.
+
+### Placebo and gate
+- **Placebo:** at every bar where the real rule would fire, enter in a **random** direction instead; same hold and costs;
+  seed `0` (one run).
+- **Gate (per cell: variant × asset class), all at once** — same numbers as the playbook gate, in ATR units:
+  at least 100 trades; average ATR-return > 0; t ≥ 3; out of sample at least 40 trades, average > 0, t ≥ 1.65;
+  and at least 0.05 ATR better than the random-direction placebo.
+- **Control cells** use the same gate only to detect a broken machine; they are not candidates.
+- **Always-long diagnostic (only if a real cell PASSes):** same entries/holds/costs but always buy. The cell is accepted
+  as a Study B candidate only if it also beats always-long by ≥ 0.05 ATR in the full sample **and** out of sample.
+  Otherwise it is shelved as "carried by long drift," not timing. This cannot rescue a FAIL.
+
+### Procedure
+- One run of `python -m trading study-b` (seed 0), both variants, all cells. No parameter changes after seeing a result.
+- 6 cells total; 4 count as real attempts. A FAIL shelves that (variant, class). A PASS that also clears always-long is a
+  **candidate** for a later slow sleeve — still not wired into the intraday agent.
+- Honest expectation: FX TSMOM after spread+swap is often weak; metals may look good in a bull sample and then fail the
+  always-long check. Controls should fail.
+
+### Machine check (before trusting a PASS)
+The module ships unit tests that: a planted trending process PASSes the gate; a random walk FAILs; a reversed
+12-1 rule does not beat its placebo.
+
+### Study B results (run once on 2026-11-20; rules and gate as approved above, seed 0)
+
+Data source for this run: **Yahoo Finance D1** (forex `*=X`, metals `GC=F`/`SI=F` proxies) plus five seeded constant-vol
+random walks as the Volatility control. MT5 was not available in the runner. ~20 years of D1 on majors
+(2006-11 to 2026-11). Overnight drag 0.015 ATR/day × 21 on forex/metals as registered.
+
+| Variant | Class | Trades | Win% | Avg ATR | t | Out of sample (t) | Placebo | Always-long | Verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| tsmom_12_1 | forex | 2,004 | 43.8 | -0.412 | -6.73 | -0.402 (-4.68) | -0.290 | -0.344 | FAIL |
+| tsmom_12_1 | metals | 430 | 46.0 | -0.117 | -0.56 | -0.033 (-0.10) | -0.180 | +0.066 | FAIL |
+| tsmom_12_1 | vol_index (control) | 840 | 52.1 | +0.066 | +0.53 | +0.007 (+0.04) | +0.038 | -0.081 | FAIL, as expected |
+| tsmom_63 | forex | 2,088 | 43.1 | -0.363 | -5.66 | -0.489 (-5.10) | -0.384 | -0.348 | FAIL |
+| tsmom_63 | metals | 450 | 45.6 | -0.103 | -0.50 | +0.012 (+0.04) | -0.605 | +0.225 | FAIL |
+| tsmom_63 | vol_index (control) | 890 | 46.5 | -0.299 | -2.38 | -0.581 (-3.05) | +0.112 | -0.078 | FAIL, as expected |
+
+**CANDIDATES: none. Both variants shelved for forex and metals. Nothing is re-tuned.**
+
+What the numbers say, without chasing them:
+- **Forex:** both lookbacks lose clearly after costs (t about −6), and do not beat the random-direction placebo. The
+  registered overnight drag (~0.315 ATR per 21-day hold) alone is large relative to any residual timing; always-long is
+  also negative, so this is not “shorting a bull.”
+- **Metals:** near zero to slightly negative; always-long is the better side (+0.07 to +0.23 ATR) while momentum is
+  negative — the opposite of a timing edge. Would have failed the always-long diagnostic even on a soft pass.
+- **Control:** both Volatility cells failed the gate (no false PASS), so the machine raised no alarm.
+- **Consequence:** Study B does not unlock a slow sleeve. Do not wire D1 momentum into the agent. Next leverage remains
+  gating free-form live entries (diagnosis Fix 1), not another intraday structure variant.
+
+JSON artifact from the run: `trading/state/study_b_20261120T135725.json`.
+
 ## Outline of later phases (to be written out fully, and approved, before they are built)
 
 - **Delta, Epsilon:** now written out in Phase 3 above.
 - **Dropped for now:** Zeta (sweep reversal) and Eta (gap fill): the signal study found no edge. They can be re-tested through
   this machine as ordinary playbooks if you want the question closed with stops and targets included, which the earlier
   fixed-horizon study did not have.
+- **Study B:** rules above; implementation in `trading/momentum.py`.

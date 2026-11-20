@@ -10,6 +10,7 @@ Usage:
   python -m trading outcomes                     # record closed-trade results; P&L by setup and symbol
   python -m trading study --timeframe H1         # do regime/sweeps/gaps predict the next N bars?
   python -m trading timing                       # Study A: do equal-level sweeps reverse at particular times of day?
+  python -m trading study-b                      # Study B: D1 time-series momentum (rules in PLAYBOOKS.md)
   python -m trading score-reads                  # score the model's chart reads against later price, then report
   python -m trading playbooks [NAME]             # list playbooks, or replay one on history and judge it
   python -m trading backtest --from 2026-05-01   # backtest from May to today
@@ -300,6 +301,72 @@ def cmd_timing(args) -> int:
     return 0
 
 
+def cmd_study_b(args) -> int:
+    """Study B: D1 time-series momentum (rules fixed in PLAYBOOKS.md before any result)."""
+    from trading.momentum import (
+        FOREX_SYMBOLS, METALS_SYMBOLS, VOL_SYMBOLS, DEFAULT_SPREADS,
+        load_candles_mt5, load_candles_yahoo, run,
+    )
+
+    symbols = [x.strip() for x in args.symbols.split(",") if x.strip()] if args.symbols else (
+        list(FOREX_SYMBOLS) + list(METALS_SYMBOLS) + list(VOL_SYMBOLS)
+    )
+    candles, spreads, source = {}, {}, ""
+
+    if args.source in ("auto", "mt5"):
+        s, errors = _load()
+        if errors and args.source == "mt5":
+            for e in errors:
+                log.error(e)
+            return 1
+        if not errors:
+            from trading.broker.metatrader import MT5Broker
+            broker = MT5Broker()
+            try:
+                broker.connect(s.mt5_login, s.mt5_password, s.mt5_server)
+                candles, spreads, source = load_candles_mt5(broker, symbols, bars=args.bars)
+            except Exception as exc:  # noqa: BLE001 — fall through to Yahoo when MT5 is absent
+                log.warning("MT5 unavailable (%s); falling back if allowed", exc)
+                candles, spreads, source = {}, {}, ""
+            finally:
+                try:
+                    broker.disconnect()
+                except Exception:  # noqa: BLE001
+                    pass
+        else:
+            log.info("MT5 settings incomplete; using Yahoo fallback")
+
+    if not candles and args.source in ("auto", "yahoo"):
+        log.info("Loading D1 from Yahoo Finance (+ synthetic Volatility control)")
+        candles, spreads, source = load_candles_yahoo(
+            [s for s in symbols if s not in VOL_SYMBOLS] or list(FOREX_SYMBOLS) + list(METALS_SYMBOLS),
+            years=args.years,
+            include_synthetic_vol=True,
+        )
+
+    if not candles:
+        log.error("No D1 history loaded.")
+        return 1
+
+    for sym, data in sorted(candles.items()):
+        log.info("%s: %d D1 bars (%s to %s) spread=%.6g",
+                 sym, len(data), getattr(data[0].time, "date", lambda: "?")(),
+                 getattr(data[-1].time, "date", lambda: "?")(),
+                 spreads.get(sym, DEFAULT_SPREADS.get(sym, 0.0)))
+
+    report = run(candles, spreads, seed=args.seed, data_source=source)
+    print(report.text())
+    out_dir = Path("trading/state")
+    try:
+        from trading.config import Settings
+        out_dir = Settings.from_env().state_db.parent
+    except Exception:  # noqa: BLE001
+        out_dir.mkdir(parents=True, exist_ok=True)
+    path = report.save(out_dir)
+    print(f"\nFull results: {path}")
+    return 0
+
+
 def cmd_study(args) -> int:
     """Test whether regime, sweeps, gaps and breaks predict the next N bars on historical candles."""
     s, errors = _load()
@@ -568,6 +635,13 @@ def main() -> int:
     p_tm = sub.add_parser("timing", help="Study A: do equal-level sweeps reverse at particular times of day?")
     p_tm.add_argument("--bars", type=int, default=20000, help="H1 history per symbol (default 20000)")
     p_tm.add_argument("--symbols", help="Comma-separated symbols (default: configured forex, metals and Volatility indices)")
+    p_sb = sub.add_parser("study-b", help="Study B: D1 time-series momentum (rules fixed in PLAYBOOKS.md)")
+    p_sb.add_argument("--source", choices=("auto", "mt5", "yahoo"), default="auto",
+                      help="D1 data source (default auto: MT5 if configured, else Yahoo + synthetic vol control)")
+    p_sb.add_argument("--bars", type=int, default=5000, help="MT5 D1 bars per symbol (default 5000)")
+    p_sb.add_argument("--years", type=int, default=20, help="Yahoo history in years (default 20)")
+    p_sb.add_argument("--symbols", help="Comma-separated symbols (default: Study B forex, metals, Volatility)")
+    p_sb.add_argument("--seed", default="0", help="Placebo seed (default 0)")
     p_sr = sub.add_parser("score-reads", help="Score the model's chart reads against later price and report")
     p_sr.add_argument("--bars", type=int, default=2000, help="H1 candles to fetch per symbol (default 2000)")
     p_sr.add_argument("--report-only", action="store_true", help="Do not connect to MT5; report on reads already scored")
@@ -616,6 +690,8 @@ def main() -> int:
         return cmd_score_reads(args)
     if args.cmd == "study":
         return cmd_study(args)
+    if args.cmd == "study-b":
+        return cmd_study_b(args)
     if args.cmd == "playbooks":
         return cmd_playbooks(args)
 

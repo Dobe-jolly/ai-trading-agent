@@ -94,20 +94,14 @@ quality of the bot's own entries. Each piece is a study with its rules written i
 - [ ] If A finds a time slot where sweeps reverse reliably, write it up as a pre-registered playbook (Zeta, currently on hold) and run it through the same machine with
   jump-stop fills and a baseline placebo. If not, drop it. Whatever is found goes into the prompt only as a measured fact, never as a belief.
 
-## Study B (candidate): daily time-series momentum, a slow sleeve (added 2026-10-28, rules not written yet)
+## Study B: daily time-series momentum, a slow sleeve (rules written 2026-11-20; see PLAYBOOKS.md)
 Source: the "Trend Is Your Friend" paper pasted 2026-10-28 (a literature synthesis). Its solid evidence is not the swing-trendline rule (illustrative, one monthly US index,
 benefit mostly from sitting in cash) but **time-series momentum on weeks-to-months horizons** (Moskowitz, Ooi and Pedersen and others): an asset's own past return predicts
 its next return. That is a daily-bar idea, a different timescale from everything tested so far (H1/H4 intraday rules, all failed). It would be a separate slow sleeve, not part of the intraday agent.
-- [ ] Write the rules in PLAYBOOKS.md for approval before building (same discipline as Phases 1-3). Sketch to start from, not yet fixed:
-  - D1 bars, forex and metals, each class a separate cell; Volatility indices as the negative control (random: should fail).
-  - Signal: sign of the past N-day return (N tied to the paper's 12-month look-back, about 250 D1 bars; maybe also one shorter look-back, stated in advance), long/short/flat, held for a fixed
-    holding period, sized to a fixed volatility target.
-  - Test through the existing machine or a small variant: it needs a hold-for-many-bars rule, not a stop/target, so check first whether `playbooks/simulate.py` can express it (time-limit exit, a
-    wide stop at several ATR) or whether a returns-based test is cleaner.
-  - Costs: spread plus **swap/rollover**, which matters for multi-week holds and is not modelled yet. Check what MT5 reports for swaps before trusting any result.
-  - History: D1 goes back years on MT5 (gold to 2011 before); check how many years each symbol really has, and use an out-of-sample split by date (the last 40%), with the same placebo.
-  - Few independent bets (9 forex pairs share a dollar factor), so the effective sample is small: report that honestly and discount the t-stats.
-- [ ] Open question before any build: is a slow daily sleeve wanted at all, given the intraday agent and the daily-loss lockout? A pass would not feed the current agent.
+- [x] Write the rules in PLAYBOOKS.md before building (same discipline as Phases 1-3): variants `tsmom_12_1` (252/21/21) and `tsmom_63` (63/0/21); ATR-unit fixed-hold simulator; spread + 0.015 ATR/day overnight drag on forex/metals; random-direction placebo; always-long diagnostic after a PASS; Volatility control.
+- [x] Implement `trading/momentum.py` + `python -m trading study-b` (MT5 D1 preferred; Yahoo + synthetic vol control when MT5 is absent). Returns-based test, not the stop/target playbook machine (jump-stops N/A; always-long is the drift analogue).
+- [x] Run once (seed 0, 2026-11-20): **all six cells FAIL, no candidates.** Results in PLAYBOOKS.md and project `docs/study-b-results.md`. No parameter changes after the run.
+- Open question remains: a pass would not feed the current intraday agent (daily-loss lockout / scan cadence). Wire only as a separate slow sleeve if accepted.
 - Note the paper's own caveats: higher-frequency trend signals add little after costs, the reversal side depends on the market, and its headline benefit is drawdown reduction (being in cash), not extra return.
 
 ## Phase 5: Playbooks (one module each, each backtested per asset class)
