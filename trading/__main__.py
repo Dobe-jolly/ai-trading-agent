@@ -18,6 +18,7 @@ Usage:
   python -m trading score-reads                  # score the model's chart reads against later price, then report
   python -m trading playbooks [NAME]             # list playbooks, or replay one on history and judge it
   python -m trading study-g10-carry --seed 0     # Study G10-F: funding/swap carry on G10 FX
+  python -m trading study-xsmom                  # Study E: cross-sectional FX momentum (rules in PLAYBOOKS.md)
   python -m trading backtest --from 2026-05-01   # backtest from May to today
   python -m trading backtest --list              # list past backtest runs
 """
@@ -510,6 +511,33 @@ def cmd_study_vol_futures_trend(args) -> int:
     print(f"\nFull results: {report.save(out_dir)}")
     return 0 if report.verdict == "PASS" else 1
 
+
+def cmd_study_xsmom(args) -> int:
+    """Study E: cross-sectional FX momentum (rules fixed in PLAYBOOKS.md before any result)."""
+    from trading.xsmom import DEFAULT_SPREADS, load_fx_yahoo, run
+
+    log.info("Loading G10 FX D1 from Yahoo Finance")
+    candles, spreads, source = load_fx_yahoo(years=args.years)
+    if len(candles) < 7:
+        log.error("Need all 7 USD pairs; got %s", sorted(candles))
+        return 1
+    for sym, data in sorted(candles.items()):
+        log.info("%s: %d D1 bars (%s to %s) spread=%.6g",
+                 sym, len(data), data[0].time.date(), data[-1].time.date(),
+                 spreads.get(sym, DEFAULT_SPREADS.get(sym, 0.0)))
+
+    report = run(candles, spreads, seed=args.seed, data_source=source)
+    print(report.text())
+    out_dir = Path("trading/state")
+    try:
+        from trading.config import Settings
+        out_dir = Settings.from_env().state_db.parent
+    except Exception:  # noqa: BLE001
+        out_dir.mkdir(parents=True, exist_ok=True)
+    path = report.save(out_dir)
+    print(f"\nFull results: {path}")
+    return 0
+
 def cmd_study(args) -> int:
     """Test whether regime, sweeps, gaps and breaks predict the next N bars on historical candles."""
     s, errors = _load()
@@ -853,6 +881,9 @@ def main() -> int:
     )
     p_g10.add_argument("--seed", default="0", help="Placebo seed (default 0)")
     p_g10.add_argument("--years", type=int, default=20, help="Yahoo D1 history in years (default 20)")
+    p_xs = sub.add_parser("study-xsmom", help="Study E: cross-sectional FX momentum (rules fixed in PLAYBOOKS.md)")
+    p_xs.add_argument("--years", type=int, default=20, help="Yahoo D1 history in years (default 20)")
+    p_xs.add_argument("--seed", default="0", help="Placebo seed (default 0)")
 
     p_bt = sub.add_parser("backtest", help="Historical backtest using MT5 data")
     p_bt.add_argument("--from",   dest="date_from", metavar="YYYY-MM-DD",
@@ -903,6 +934,8 @@ def main() -> int:
         return cmd_study_vol_futures_trend(args)
     if args.cmd == "study-g10-carry":
         return cmd_study_g10_carry(args)
+    if args.cmd == "study-xsmom":
+        return cmd_study_xsmom(args)
     if args.cmd == "playbooks":
         return cmd_playbooks(args)
 

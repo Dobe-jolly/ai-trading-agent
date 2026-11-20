@@ -808,6 +808,72 @@ placebo avg −0.118. Failed avg>0 and t≥3. Always-long / anti-carry not engag
 Details: store `docs/study-g10-funding-carry-results.md`; artifact `trading/state/study_g10_carry_20261120T153824.json`.
 
 
+## Study E: Cross-sectional FX momentum. Rules written 2026-11-20, before any result
+
+**Why this family (not a retune):** Study B falsified *time-series* D1 momentum (each pair’s own past
+return). Classic FX literature (Menkhoff, Sarno, Schmeling & Schrimpf, JFE 2012; Asness–Moskowitz–Pedersen)
+documents a different idea: **rank currencies against each other** and long recent winners / short recent
+losers. That is a cross-sectional spread, not TSMOM, not carry, not equity→FX risk-on, not seasonality.
+It is **not** wired into the live agent unless it PASSes and is later added to survivors.
+
+### Why a dedicated returns simulator
+Fixed-hold ATR-unit path. **Jump-stops:** N/A (no stop). **Boom/Crash drift placebo:** N/A (forex only).
+Same numerical Phase-0 gate (n, t, OOS, beat random placebo by ≥0.05 R). Branch may sit on `main`
+without gate-realism merge; those defaults are irrelevant here because there is no stop/target path.
+
+### Rule (one variant, registered now — not chosen after the run)
+| Name | Formation L | Hold H | Cross-section |
+|---|---|---|---|
+| `xsmom_21_21` | 21 D1 bars | 21 D1 bars | long top-2 / short bottom-2 G10 currencies vs USD |
+
+Closest discrete analogue of Menkhoff et al. MOM(f=1, h=1) on a small G10 panel (short formation/hold
+was their strongest cell). One cell only — no grid over (f,h).
+
+- **Timeframe:** D1. **Market:** forex only (one cell).
+- **Universe (7 currencies, USD numeraire):** EUR, GBP, JPY, AUD, NZD, CAD, CHF via pairs  
+  `EURUSD`, `GBPUSD`, `USDJPY`, `AUDUSD`, `NZDUSD`, `USDCAD`, `USDCHF`.
+- **Currency spot return** over [t−L, t] (closes): for `CCYUSD` use `close[t]/close[t−L]−1`; for `USDCCY`
+  use `close[t−L]/close[t]−1` (appreciation of the non-USD currency). Missing bar → currency ineligible
+  that date.
+- **Signal date t:** require ≥6 eligible currencies. Rank by formation return. Long the **top 2**, short
+  the **bottom 2** (ties broken by alphabetical currency code, fixed — not optimized). Skip if top/bottom
+  sets overlap (degenerate ranks).
+- **Trade mapping:** long currency C → buy `CUSD` or sell `USDC` as listed above; short is the opposite.
+- **Entry** at each selected pair’s open on bar t+1. **Exit** at that pair’s close on bar t+H. Non-overlapping
+  rebalances: after a cohort exits, the next signal uses the next eligible t ≥ previous exit index on a
+  **common calendar** (intersection of dates present on all seven pairs; signal index walks that calendar).
+- **Result in ATR units** at each pair’s bar t (Wilder 14):  
+  `r = direction × (exit − entry) / ATR − spread / ATR − overnight`  
+  with `overnight = 0.015 × H` (same registered multi-day FX drag as prior D1 sleeves).
+- **Costs:** one full static spread per leg (`backtest` pip×point on Yahoo) + overnight as above.
+- **Placebo:** same signal dates and same top-2/bottom-2 *cardinality*, but currencies for long/short
+  slots are a **random permutation** of the eligible set (seed `0`). Same holds/costs.
+- **Gate (forex cell), all at once:** ≥100 trades (legs); avg R > 0; t ≥ 3; OOS (last 40% of each pair’s
+  bar index) ≥40 trades, avg > 0, t ≥ 1.65; beat placebo by ≥0.05 R. Identical thresholds to Phase 0.
+- **Dollar-factor diagnostic (only if PASS):** same dates/holds/costs but always long the two historically
+  highest-beta risk proxies among the seven (**AUD and NZD**) and short **JPY and CHF** (safe). Candidate
+  only if real beats this fixed risk-on basket by ≥0.05 R full and OOS. Cannot rescue a FAIL. (Checks that
+  “winners” aren’t just permanent risk-on.)
+- **Sample caveat:** seven USD pairs share factors; legs in one rebalance are dependent — pooled t
+  overstates independence; report per-pair averages and discount the pooled t.
+- **Data source:** Yahoo D1 (`EURUSD=X`, …). Source recorded.
+- **History:** ~20y Yahoo overlap.
+- **Honest expectation:** Menkhoff profits shrank after costs and in recent samples on majors; G10-only
+  panel is thin vs their 48-currency set — a FAIL is the base case and shelves the sleeve.
+
+### Procedure
+One run: `python -m trading study-xsmom --seed 0`. No parameter changes after seeing the result. 1 real cell.
+
+### Result (run 2026-11-20, after the rules above were fixed)
+Command: `python -m trading study-xsmom --seed 0`. Yahoo D1 G10 USD pairs.
+
+| Cell | n | Win% | Avg R | t | OOS avg (t) | Placebo | Verdict |
+|---|---|---|---|---|---|---|---|
+| forex `xsmom_21_21` | 936 | 41.5 | **-0.463** | -4.99 | **-0.552** (−4.38) | -0.378 | **FAIL** |
+
+Failed: avg/OOS avg not > 0; t bars missed; did not beat placebo by ≥0.05 R. Risk-on basket diagnostic not run (no PASS). **CANDIDATES: none.** Shelved; no retune; survivors unchanged. Details: project store `docs/study-next-family-results.md`.
+
+
 ## Outline of later phases (to be written out fully, and approved, before they are built)
 
 - **Delta, Epsilon:** now written out in Phase 3 above.
@@ -820,3 +886,4 @@ Details: store `docs/study-g10-funding-carry-results.md`; artifact `trading/stat
 - **Study D (equity→FX risk-on/off):** rules above; implementation in `trading/eqrisk.py`.
 - **Study D (vol futures trend):** rules above; implementation in `trading/vol_futures_trend.py`.
 - **Study G10-F:** rules above; implementation in `trading/carry_funding.py`. **Run once 2026-11-20: FAIL (no candidates).**
+- **Study E (FX XSMOM):** rules above; implementation in `trading/xsmom.py`.

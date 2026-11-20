@@ -124,6 +124,14 @@ Separate from OECD-policy carry sketches: overnight / money-market funding diffe
 - [x] Implemented `trading/carry_funding.py` + `python -m trading study-g10-carry`; machine-checked
 - [x] One run seed 0 under default gate (placebo + OOS, honest spread + synthetic funding): **FAIL** (avg −0.027 ATR, t −0.42). No survivors. Results: store `docs/study-g10-funding-carry-results.md`
 
+## Study E: cross-sectional FX momentum (added 2026-11-20)
+Menkhoff-style winners-minus-losers on G10 vs USD — not time-series TSMOM.
+- [x] Rules pre-registered in PLAYBOOKS.md **before** the run (`xsmom_21_21`).
+- [x] Implemented `trading/xsmom.py` + `python -m trading study-xsmom`; tests in `tests/trading/test_xsmom.py`.
+- [x] One run seed 0: forex **FAIL** (n=936, avg R −0.463, t −4.99; OOS −0.552 t −4.38; placebo −0.378). No retune. Survivors untouched.
+- Results: project store `docs/study-next-family-results.md`.
+
+
 ## Phase 5: Playbooks (one module each, each backtested per asset class)
 **Now run in phases, see [PLAYBOOKS.md](PLAYBOOKS.md): rules and gate are fixed before any result exists.**
 - [x] Phase 0: the test machine (`trading/playbooks/`: interface, replay simulator with pessimistic fills and costs, placebo, pre-registered gate, lookahead checker, `python -m trading playbooks`). Proven first: finds a planted edge, rejects a random walk and a reversed rule, and costs can eat an edge (230 trading tests pass)
