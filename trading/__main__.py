@@ -396,7 +396,11 @@ def cmd_playbooks(args) -> int:
         log.error("No symbol had enough history.")
         return 1
 
-    report = run_playbook(playbook, candles, spreads, seed=args.seed, jump_stops=args.jump_stops)
+    report = run_playbook(
+        playbook, candles, spreads, seed=args.seed,
+        jump_stops=not args.no_jump_stops,
+        drift_placebo=not args.no_drift_placebo,
+    )
     print(report.text())
     print(f"\nFull results: {report.save(s.state_db.parent)}")
     return 0
@@ -544,8 +548,12 @@ def main() -> int:
     p_pb.add_argument("--bars", type=int, default=20000, help="History to load per symbol (default 20000)")
     p_pb.add_argument("--symbols", help="Comma-separated symbols (default: configured list, filtered to the playbook's asset classes)")
     p_pb.add_argument("--seed", default="0", help="Seed for the placebo (default 0)")
-    p_pb.add_argument("--jump-stops", action="store_true",
-                      help="A bar that touches the stop and closes beyond it fills at the close (for spiky markets)")
+    p_pb.add_argument("--no-jump-stops", action="store_true",
+                      help="Diagnostic only: fill stops at the stop price even when the bar closes beyond it "
+                           "(default is jump-stops ON — close fills when price jumps through the stop)")
+    p_pb.add_argument("--no-drift-placebo", action="store_true",
+                      help="Diagnostic only: skip the with-drift placebo gate on Boom/Crash "
+                           "(default ON — a rule must beat trading blindly with the drift)")
     p_study = sub.add_parser("study", help="Test whether regime, sweeps and gaps predict the next N bars")
     p_study.add_argument("--timeframe", default="H1", help="Candle timeframe (default H1)")
     p_study.add_argument("--bars", type=int, default=15000, help="History to load per symbol (default 15000)")

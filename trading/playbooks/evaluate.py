@@ -5,9 +5,13 @@ all at once:
   - have at least MIN_TRADES trades, an average R above zero, and t >= MIN_T;
   - hold up out of sample (last 40% of each history): at least MIN_OOS_TRADES trades, average R
     above zero, t >= MIN_OOS_T;
-  - beat a placebo that trades the same geometry at random by at least MIN_EDGE_OVER_PLACEBO R.
-The placebo is there because stops, targets and spreads give any entry rule a baseline expectancy;
-what matters is how much of the result comes from the rule's timing and not from the geometry.
+  - beat a placebo that trades the same geometry at random by at least MIN_EDGE_OVER_PLACEBO R;
+  - when symbols have a known structural drift (Boom/Crash), also beat a drift-direction placebo
+    by MIN_EDGE_OVER_PLACEBO R in the full sample AND out of sample.
+
+Fills default to jump-stops (a bar that touches the stop and closes beyond it fills at the close).
+The random-direction placebo alone cannot see fill artifacts or "trade with the drift" on Boom/Crash;
+those were the Delta false-PASS lessons, now part of the first gate rather than a follow-up.
 """
 from __future__ import annotations
 
@@ -21,7 +25,7 @@ from typing import Optional
 
 from ..study import asset_class
 from .base import Bars, Playbook
-from .simulate import Placebo, Trade, simulate
+from .simulate import DriftPlacebo, Placebo, Trade, drift_direction, simulate
 
 MIN_TRADES = 100
 MIN_T = 3.0
@@ -70,7 +74,11 @@ def stats(trades: list[Trade]) -> Stats:
     )
 
 
-def judge(real: Stats, placebo: Stats) -> tuple[str, list[str]]:
+def judge(
+    real: Stats,
+    placebo: Stats,
+    drift: Optional[Stats] = None,
+) -> tuple[str, list[str]]:
     """PASS only if every condition holds. Returns the verdict and the conditions that failed."""
     failed = []
     if real.n < MIN_TRADES:
@@ -88,6 +96,18 @@ def judge(real: Stats, placebo: Stats) -> tuple[str, list[str]]:
     if real.avg_r - placebo.avg_r < MIN_EDGE_OVER_PLACEBO:
         failed.append(f"beats the placebo by only {real.avg_r - placebo.avg_r:+.3f} R "
                       f"(real {real.avg_r:+.3f}, placebo {placebo.avg_r:+.3f}; need {MIN_EDGE_OVER_PLACEBO})")
+    if drift is not None:
+        if real.avg_r - drift.avg_r < MIN_EDGE_OVER_PLACEBO:
+            failed.append(
+                f"beats the drift placebo by only {real.avg_r - drift.avg_r:+.3f} R "
+                f"(real {real.avg_r:+.3f}, drift {drift.avg_r:+.3f}; need {MIN_EDGE_OVER_PLACEBO})"
+            )
+        if real.avg_r_oos - drift.avg_r_oos < MIN_EDGE_OVER_PLACEBO:
+            failed.append(
+                f"out-of-sample beats the drift placebo by only "
+                f"{real.avg_r_oos - drift.avg_r_oos:+.3f} R "
+                f"(real {real.avg_r_oos:+.3f}, drift {drift.avg_r_oos:+.3f}; need {MIN_EDGE_OVER_PLACEBO})"
+            )
     return ("FAIL" if failed else "PASS"), failed
 
 
@@ -100,6 +120,7 @@ class Row:
     verdict: str
     failed: list[str]
     per_symbol: dict[str, tuple[int, float]] = field(default_factory=dict)   # symbol -> (trades, average R)
+    drift: Optional[Stats] = None
 
 
 @dataclass
@@ -110,25 +131,34 @@ class Report:
     stop_atr: float
     target_atr: float
     max_bars: int
+    jump_stops: bool = True
+    drift_placebo: bool = True
 
     def passed(self) -> list[Row]:
         return [r for r in self.rows if r.verdict == "PASS"]
 
     def text(self) -> str:
+        fills = "jump-stops ON" if self.jump_stops else "jump-stops OFF (diagnostic)"
+        drift = "drift placebo ON" if self.drift_placebo else "drift placebo OFF (diagnostic)"
         lines = [
             f"Playbook {self.playbook} on {self.timeframe}: stop {self.stop_atr:g} ATR, target {self.target_atr:g} ATR, "
-            f"time limit {self.max_bars} bars. Results in R (1R = the initial stop), after one spread per trade.",
+            f"time limit {self.max_bars} bars. Results in R (1R = the initial stop), after one spread per trade. "
+            f"Fills: {fills}. Gate extras: {drift}.",
             f"Gate per asset class: >={MIN_TRADES} trades, avg R > 0, t >= {MIN_T:g}; out of sample >={MIN_OOS_TRADES} "
-            f"trades, avg R > 0, t >= {MIN_OOS_T:g}; and at least {MIN_EDGE_OVER_PLACEBO:g} R better than the placebo.",
+            f"trades, avg R > 0, t >= {MIN_OOS_T:g}; at least {MIN_EDGE_OVER_PLACEBO:g} R better than the random "
+            f"placebo; and on Boom/Crash (when drift placebo is on) the same margin over the drift-direction placebo "
+            f"in full sample and out of sample.",
             "",
             f"  {'asset class':<12}{'trades':>7}{'win%':>6}{'avg R':>8}{'t':>7}{'PF':>6} | {'oos n':>6}{'oos R':>8}{'oos t':>7} | "
-            f"{'placebo R':>10}  verdict",
+            f"{'placebo R':>10}{'drift R':>10}  verdict",
         ]
         for r in self.rows:
             pf = f"{r.real.profit_factor:.2f}" if r.real.profit_factor is not None else "-"
+            drift_r = f"{r.drift.avg_r:>+10.3f}" if r.drift is not None else f"{'n/a':>10}"
             lines.append(
                 f"  {r.group:<12}{r.real.n:>7}{r.real.win_pct:>6.1f}{r.real.avg_r:>+8.3f}{r.real.t:>+7.2f}{pf:>6} | "
-                f"{r.real.n_oos:>6}{r.real.avg_r_oos:>+8.3f}{r.real.t_oos:>+7.2f} | {r.placebo.avg_r:>+10.3f}  {r.verdict}")
+                f"{r.real.n_oos:>6}{r.real.avg_r_oos:>+8.3f}{r.real.t_oos:>+7.2f} | "
+                f"{r.placebo.avg_r:>+10.3f}{drift_r}  {r.verdict}")
             for reason in r.failed:
                 lines.append(f"      - {reason}")
         passed = self.passed()
@@ -139,8 +169,11 @@ class Report:
         return {
             "playbook": self.playbook, "timeframe": self.timeframe, "stop_atr": self.stop_atr,
             "target_atr": self.target_atr, "max_bars": self.max_bars,
+            "jump_stops": self.jump_stops, "drift_placebo": self.drift_placebo,
             "rows": [{"group": r.group, "symbols": r.symbols, "verdict": r.verdict, "failed": r.failed,
-                      "real": r.real.__dict__, "placebo": r.placebo.__dict__, "per_symbol": r.per_symbol}
+                      "real": r.real.__dict__, "placebo": r.placebo.__dict__,
+                      "drift": r.drift.__dict__ if r.drift is not None else None,
+                      "per_symbol": r.per_symbol}
                      for r in self.rows],
         }
 
@@ -153,12 +186,17 @@ class Report:
 
 def run_playbook(
     playbook: Playbook, candles_by_symbol: dict[str, list], spreads: Optional[dict[str, float]] = None,
-    seed: str = "0", jump_stops: bool = False,
+    seed: str = "0", jump_stops: bool = True, drift_placebo: bool = True,
 ) -> Report:
-    """Simulate the playbook on every symbol it is meant for, plus a placebo on each, and judge per class."""
+    """Simulate the playbook on every symbol it is meant for, plus placebos, and judge per class.
+
+    jump_stops and drift_placebo default ON. Pass False only for diagnostic comparisons against the
+    pre-Delta gate (optimistic stop fills / no with-drift baseline).
+    """
     spreads = spreads or {}
     real_by_class: dict[str, list[Trade]] = {}
     placebo_by_class: dict[str, list[Trade]] = {}
+    drift_by_class: dict[str, list[Trade]] = {}
     symbols_by_class: dict[str, list[str]] = {}
     per_symbol: dict[str, dict[str, tuple[int, float]]] = {}
     for symbol, candles in candles_by_symbol.items():
@@ -175,9 +213,25 @@ def run_playbook(
         symbols_by_class.setdefault(group, []).append(symbol)
         s = stats(real.trades)
         per_symbol.setdefault(group, {})[symbol] = (s.n, round(s.avg_r, 3))
+        if drift_placebo:
+            ddir = drift_direction(symbol)
+            if ddir is not None:
+                drifted = simulate(
+                    symbol, bars,
+                    DriftPlacebo(playbook, rate, f"{seed}:drift:{symbol}", ddir),
+                    spread, jump_stops,
+                )
+                drift_by_class.setdefault(group, []).extend(drifted.trades)
     rows = []
     for group in sorted(real_by_class):
         real, placebo = stats(real_by_class[group]), stats(placebo_by_class[group])
-        verdict, failed = judge(real, placebo)
-        rows.append(Row(group, symbols_by_class[group], real, placebo, verdict, failed, per_symbol[group]))
-    return Report(playbook.name, playbook.timeframe, rows, playbook.stop_atr, playbook.target_atr, playbook.max_bars)
+        drift_stats = stats(drift_by_class[group]) if group in drift_by_class else None
+        verdict, failed = judge(real, placebo, drift_stats)
+        rows.append(Row(
+            group, symbols_by_class[group], real, placebo, verdict, failed,
+            per_symbol[group], drift=drift_stats,
+        ))
+    return Report(
+        playbook.name, playbook.timeframe, rows, playbook.stop_atr, playbook.target_atr, playbook.max_bars,
+        jump_stops=jump_stops, drift_placebo=drift_placebo,
+    )

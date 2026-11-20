@@ -12,16 +12,22 @@ that doesn't use the results.
 - **Entry** at the open of the bar after the signal. One trade at a time per symbol.
 - **Exit** at a fixed stop, a fixed target, or a time limit, all set by the rule and measured in ATRs at the signal bar.
 - **Pessimistic fills:** if stop and target share a bar the stop comes first; gaps fill at the open; one full spread per trade.
+- **Jump-stops (default ON):** a bar that touches the stop and also closes beyond it fills at that close (worse than −1R).
+  Needed for markets with jumps (Boom/Crash). Disable only for diagnostics: `--no-jump-stops`.
 - **Result in R** (1R = the initial stop).
 - **Placebo:** random entries, random direction, same stop, target and time limit. It shows what the trade geometry and costs earn by themselves.
+- **Drift placebo (default ON for Boom/Crash):** same entry rate and geometry, but always in the known drift direction
+  (sell Boom, buy Crash). A rule that only rides the drift cannot PASS. Disable only for diagnostics: `--no-drift-placebo`.
 - **No lookahead:** every playbook must pass `lookahead_violations` (the rule gives the same answer on data cut at bar t).
 - **Out of sample:** the last 40% of each symbol's history is scored separately.
 
 **Gate (per asset class), all at once:** at least 100 trades; average R > 0; t >= 3; out of sample at least 40 trades,
-average R > 0, t >= 1.65; and at least 0.05 R better than the placebo.
+average R > 0, t >= 1.65; at least 0.05 R better than the random-direction placebo; and, when a drift placebo applies,
+at least 0.05 R better than it in the full sample **and** out of sample. Jump-stop fills are the default path.
 
 The machine itself was checked first: it passes a planted momentum edge, fails a random walk, fails a reversed rule,
-and fails an edge that costs consume.
+and fails an edge that costs consume. After the Delta false PASS, jump-stops and the drift placebo were moved from
+follow-up checks into this default gate (2026-11-20).
 
 ## Expectations, stated honestly
 
@@ -258,6 +264,9 @@ faults are plausible on a Boom/Crash index, which has a steady drift plus memory
 
 **Delta is shelved. Phase 3 is closed with no survivors.** The gate's random-direction placebo could not see either problem: a lesson for any future rule on
 a market with jumps or drift is to run jump-stop fills and a drift-direction placebo as part of the first test, not after a pass.
+
+**Gate update (2026-11-20):** that lesson is now the default. `python -m trading playbooks` uses jump-stops and the
+drift placebo unless `--no-jump-stops` / `--no-drift-placebo` are passed for a diagnostic comparison only.
 
 **Consequence for the system prompt (not changed, awaiting your decision):** two statements are unsupported by these tests.
 "Spike fade: after a large spike, price often mean-reverts" (Boom/Crash) and "Mean-reversion and range-compression setups work well" (Step Index).
