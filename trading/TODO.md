@@ -94,6 +94,13 @@ quality of the bot's own entries. Each piece is a study with its rules written i
 - [ ] If A finds a time slot where sweeps reverse reliably, write it up as a pre-registered playbook (Zeta, currently on hold) and run it through the same machine with
   jump-stop fills and a baseline placebo. If not, drop it. Whatever is found goes into the prompt only as a measured fact, never as a belief.
 
+## Study C: FX carry sleeve (added 2026-11-20)
+Lagged policy / money-market differential, fixed 21 D1 hold, spread + carry accrual, placebo + OOS under the gate-realism defaults (jump-stops / drift N/A for this sleeve).
+- [x] Rules pre-registered in PLAYBOOKS.md (including OECD IR3TIB fallback when FRED unreachable) **before** the run.
+- [x] Implemented `trading/carry.py` + `python -m trading study-carry`; tests in `tests/trading/test_carry.py`.
+- [x] One run seed 0: forex cell **FAIL** (n=2090, avg R −0.074, t −1.19; placebo −0.017; OOS avg +0.160 t +1.67 but full/placebo gate fails). No retune. Survivors untouched.
+- Results: project store `docs/study-fx-carry-results.md`.
+
 ## Study B: daily time-series momentum, a slow sleeve (rules written 2026-11-20; see PLAYBOOKS.md)
 Source: the "Trend Is Your Friend" paper pasted 2026-10-28 (a literature synthesis). Its solid evidence is not the swing-trendline rule (illustrative, one monthly US index,
 benefit mostly from sitting in cash) but **time-series momentum on weeks-to-months horizons** (Moskowitz, Ooi and Pedersen and others): an asset's own past return predicts

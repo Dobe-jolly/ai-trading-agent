@@ -500,6 +500,70 @@ Artifact: `trading/state/study_metals_trend_20261120T143720.json`.
 **VERDICT: FAIL** — full-sample t +1.37 is below 3.0. The filter cleared the always-long and random-long margins and OOS avg/t bars, but not significance on the full sample. **Shelved as written. No retune. Survivors allowlist unchanged.**
 
 
+## Study C: FX carry sleeve. Rules written 2026-11-20, before any result
+
+A slow FX sleeve: long the higher-yielding currency in a pair, short the lower-yielding one, hold for a fixed
+window, and credit the interest differential as carry. This is a different economic idea from structure rules
+(Alpha–Epsilon) and from Study B time-series momentum (which failed). It is **not** wired into the intraday agent
+unless it PASSes and is later added to `survivors.py`.
+
+### Why a dedicated returns simulator (not stop/target playbooks)
+Carry is a hold-and-accrue sleeve. Forcing wide ATR stops would cut paths the literature rule would hold.
+`trading/carry.py` uses a fixed-hold ATR-unit simulator. **Jump-stops:** N/A (no stop). **Boom/Crash drift placebo:**
+N/A (forex only). The **same numerical gate** as Phase 0 applies (n, t, OOS, beat random placebo by ≥0.05 R).
+The dollar-factor analogue of the drift placebo is an **always-long diagnostic** after a PASS (cannot rescue a FAIL).
+Branch built on top of the gate-realism defaults so future stop-based playbooks keep jump-stops/drift ON.
+
+### Rule (one variant, registered now — not chosen after the run)
+| Name | Hold H | Signal |
+|---|---|---|
+| `carry_21` | 21 D1 bars | sign of lagged policy-rate differential for the pair |
+
+- **Timeframe:** D1. **Market:** forex only (one cell). Metals are a separate study.
+- **Pairs (9):** EURUSD, GBPUSD, USDJPY, USDCHF, AUDUSD, NZDUSD, USDCAD, EURJPY, EURGBP.
+- **Rates (annualised % money-market / policy proxies), preferred FRED:** USD=`FEDFUNDS`, EUR=`ECBDFR`,
+  GBP=`IUDSOIA`, JPY=`IRSTCI01JPM156N`, AUD=`IRSTCI01AUM156N`, CAD=`IRSTCI01CAM156N`,
+  CHF=`IRSTCI01CHM156N`, NZD=`IRSTCI01NZM156N`.
+- **Rates fallback (registered before the run — FRED graph CSV was unreachable from this environment):**
+  OECD SDMX `DF_FINMARK` monthly **IR3TIB** (3-month interbank, % p.a.) for
+  USA / EA20 / GBR / JPN / AUS / CAN / CHE / NZL. Same lag and differential rules; report records which
+  rate source loaded. No retune of H or gate if the fallback is used.
+- **Lag (no lookahead):** at bar t (calendar month M), use each currency’s rate for **month M−1**
+  (month-end / last print in that month). Missing rate → no trade that bar.
+- **Differential** for BASEQUOTE: `d = r_base − r_quote`. Buy if d > 0, sell if d < 0, skip if d == 0.
+- **Entry** at the open of bar t+1. **Exit** at the close of bar t+H. One trade at a time per symbol
+  (next signal after exit).
+- **Result in ATR units** at t (Wilder 14):  
+  `r = direction × (exit − entry) / ATR + direction × carry_price / ATR − spread / ATR`  
+  where `carry_price = entry × (r_base − r_quote)/100 × H/365` using the **same lagged rates** as the signal
+  (held fixed over the trade — not marked to live rates mid-hold).
+- **Costs:** one full spread per trade (static price spreads from `backtest._SPREAD_PIPS × point` when Yahoo;
+  live mid spread when MT5). Carry is credited/debited as above — not a second flat ATR drag.
+- **Placebo:** same entry bars / hold / costs, **random** direction (so it receives whatever carry that
+  random side earns). Seed `0`, one run.
+- **Gate (forex cell), all at once:** ≥100 trades; avg R > 0; t ≥ 3; OOS ≥40 trades, avg > 0, t ≥ 1.65;
+  beat random placebo by ≥0.05 R. Identical thresholds to Phase 0.
+- **Always-long diagnostic (only if PASS):** same entries/holds/costs but always buy. Accepted as a
+  candidate only if also ≥0.05 R better than always-long in full sample **and** OOS. Cannot rescue a FAIL.
+- **Sample caveat:** the 9 pairs share USD/EUR factors — pooled t overstates independence; report per-symbol
+  averages and discount the pooled t.
+- **Data source:** prefer MT5 D1; else Yahoo Finance daily (`EURUSD=X`, …). Source recorded on the report.
+- **History:** as much overlap of spot and rates as available (rates from ~1999+ for EUR; run uses what loads).
+- **Honest expectation:** classic carry has been weaker post-GFC and after costs; a FAIL shelves the sleeve.
+
+### Procedure
+One run: `python -m trading study-carry --seed 0`. No parameter changes after seeing the result. 1 real cell.
+
+### Result (run 2026-11-20, after the rules above were fixed)
+Command: `python -m trading study-carry --seed 0`. Spots: Yahoo D1. Rates: OECD IR3TIB (FRED unreachable; fallback registered above before the run).
+
+| Cell | n | Win% | Avg R | t | OOS avg (t) | Placebo | Verdict |
+|---|---|---|---|---|---|---|---|
+| forex `carry_21` | 2090 | 50.4 | **-0.074** | -1.19 | +0.160 (+1.67) | -0.017 | **FAIL** |
+
+Failed: avg R not > 0; t < 3; did not beat placebo by ≥0.05 R. Always-long diagnostic not run (no PASS). **CANDIDATES: none.** Sleeve shelved; no retune; survivors unchanged. Details: project store `docs/study-fx-carry-results.md`.
+
+
 ## Outline of later phases (to be written out fully, and approved, before they are built)
 
 - **Delta, Epsilon:** now written out in Phase 3 above.
@@ -508,3 +572,4 @@ Artifact: `trading/state/study_metals_trend_20261120T143720.json`.
   fixed-horizon study did not have.
 - **Study B:** rules above; implementation in `trading/momentum.py`.
 - **Study C (metals trend):** rules above; implementation in `trading/metals_trend.py`.
+- **Study C (FX carry):** rules above; implementation in `trading/carry.py`.
