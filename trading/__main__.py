@@ -684,14 +684,14 @@ def main() -> int:
     p_sb.add_argument("--years", type=int, default=20, help="Yahoo history in years (default 20)")
     p_sb.add_argument("--symbols", help="Comma-separated symbols (default: Study B forex, metals, Volatility)")
     p_sb.add_argument("--seed", default="0", help="Placebo seed (default 0)")
-p_smt = sub.add_parser("study-metals-trend",
+    p_smt = sub.add_parser("study-metals-trend",
                            help="Study C: metals long-biased D1 trend sleeve (rules fixed in PLAYBOOKS.md)")
     p_smt.add_argument("--source", choices=("auto", "mt5", "yahoo"), default="auto",
                        help="D1 data source (default auto: MT5 if configured, else Yahoo GC=F/SI=F)")
     p_smt.add_argument("--bars", type=int, default=5000, help="MT5 D1 bars per symbol (default 5000)")
     p_smt.add_argument("--years", type=int, default=20, help="Yahoo history in years (default 20)")
     p_smt.add_argument("--seed", default="0", help="Placebo seed (default 0)")
-        p_sr = sub.add_parser("score-reads", help="Score the model's chart reads against later price and report")
+    p_sr = sub.add_parser("score-reads", help="Score the model's chart reads against later price and report")
     p_sr.add_argument("--bars", type=int, default=2000, help="H1 candles to fetch per symbol (default 2000)")
     p_sr.add_argument("--report-only", action="store_true", help="Do not connect to MT5; report on reads already scored")
     p_out = sub.add_parser("outcomes", help="Record results of closed trades; show P&L by setup and symbol")
