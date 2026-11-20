@@ -12,6 +12,7 @@ Usage:
   python -m trading timing                       # Study A: do equal-level sweeps reverse at particular times of day?
   python -m trading study-b                      # Study B: D1 time-series momentum (rules in PLAYBOOKS.md)
   python -m trading study-metals-trend           # Study C: metals long-biased D1 trend sleeve (PLAYBOOKS.md)
+  python -m trading study-carry                  # Study C: FX carry sleeve (PLAYBOOKS.md)
   python -m trading score-reads                  # score the model's chart reads against later price, then report
   python -m trading playbooks [NAME]             # list playbooks, or replay one on history and judge it
   python -m trading backtest --from 2026-05-01   # backtest from May to today
@@ -409,6 +410,43 @@ def cmd_study_metals_trend(args) -> int:
     print(f"\nFull results: {report.save(out_dir)}")
     return 0 if report.verdict == "PASS" else 1
 
+
+def cmd_study_carry(args) -> int:
+    """Study C: FX carry sleeve (rules fixed in PLAYBOOKS.md before any result)."""
+    from trading.carry import (
+        FOREX_SYMBOLS, DEFAULT_SPREADS, load_candles_yahoo, load_currency_month_rates, run,
+    )
+
+    symbols = [x.strip() for x in args.symbols.split(",") if x.strip()] if args.symbols else list(FOREX_SYMBOLS)
+    log.info("Loading policy / money-market rates (lagged month M-1 differentials)")
+    rates, rate_source = load_currency_month_rates()
+    log.info("Rate source: %s", rate_source)
+    for ccy, months in rates.items():
+        log.info("  %s: %d month-end prints", ccy, len(months))
+
+    log.info("Loading D1 spots from Yahoo Finance")
+    candles, spreads, spot_source = load_candles_yahoo(symbols, years=args.years)
+    if not candles:
+        log.error("No D1 forex history loaded.")
+        return 1
+    for sym, data in sorted(candles.items()):
+        log.info("%s: %d D1 bars (%s to %s) spread=%.6g",
+                 sym, len(data), data[0].time.date(), data[-1].time.date(),
+                 spreads.get(sym, DEFAULT_SPREADS.get(sym, 0.0)))
+
+    source = f"{spot_source}+{rate_source}"
+    report = run(candles, rates, spreads, seed=args.seed, data_source=source)
+    print(report.text())
+    out_dir = Path("trading/state")
+    try:
+        from trading.config import Settings
+        out_dir = Settings.from_env().state_db.parent
+    except Exception:  # noqa: BLE001
+        out_dir.mkdir(parents=True, exist_ok=True)
+    path = report.save(out_dir)
+    print(f"\nFull results: {path}")
+    return 0
+
 def cmd_study(args) -> int:
     """Test whether regime, sweeps, gaps and breaks predict the next N bars on historical candles."""
     s, errors = _load()
@@ -691,6 +729,10 @@ def main() -> int:
     p_smt.add_argument("--bars", type=int, default=5000, help="MT5 D1 bars per symbol (default 5000)")
     p_smt.add_argument("--years", type=int, default=20, help="Yahoo history in years (default 20)")
     p_smt.add_argument("--seed", default="0", help="Placebo seed (default 0)")
+    p_sc = sub.add_parser("study-carry", help="Study C: FX carry sleeve (rules fixed in PLAYBOOKS.md)")
+    p_sc.add_argument("--years", type=int, default=20, help="Yahoo D1 history in years (default 20)")
+    p_sc.add_argument("--symbols", help="Comma-separated forex pairs (default: Study C nine pairs)")
+    p_sc.add_argument("--seed", default="0", help="Placebo seed (default 0)")
     p_sr = sub.add_parser("score-reads", help="Score the model's chart reads against later price and report")
     p_sr.add_argument("--bars", type=int, default=2000, help="H1 candles to fetch per symbol (default 2000)")
     p_sr.add_argument("--report-only", action="store_true", help="Do not connect to MT5; report on reads already scored")
@@ -743,6 +785,8 @@ def main() -> int:
         return cmd_study_b(args)
     if args.cmd == "study-metals-trend":
         return cmd_study_metals_trend(args)
+    if args.cmd == "study-carry":
+        return cmd_study_carry(args)
     if args.cmd == "playbooks":
         return cmd_playbooks(args)
 
