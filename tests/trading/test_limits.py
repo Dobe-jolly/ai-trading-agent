@@ -114,12 +114,14 @@ def test_the_prompt_states_the_limits_the_settings_enforce(tmp_path):
                  "Maximum 8 open positions leaning the same way", "Maximum 2% of balance risked per trade",
                  "Maximum 7 synthetic index positions"):
         assert line in text
+    assert "Survivors gate: on" in text
     assert "Maximum 5 simultaneous positions" not in text and "3 new opens" not in text
 
 
 def test_the_prompt_renders_back_to_the_original_numbers_at_the_defaults(tmp_path):
     text = render_prompt(PROMPT.read_text(encoding="utf-8"), settings(tmp_path))
     assert "Maximum 5 simultaneous positions" in text and "Maximum 3 new opens per scan" in text
+    assert "every free-form open is blocked" in text
 
 
 def test_an_unknown_token_is_an_error_not_a_silent_blank(tmp_path):

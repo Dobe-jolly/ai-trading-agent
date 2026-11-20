@@ -30,6 +30,7 @@ class TradeDecision:
     evidence: list[str] = field(default_factory=list)
     position_ticket: Optional[int] = None  # required for close / modify
     stop_timeframe: str = ""             # H1 | H4 | D1: whose structure the stop is anchored to (required for open)
+    playbook: str = ""                   # approved survivor name required for open when the survivors gate is on
     chart_read: Optional[dict] = None    # the model's structured map of the chart (see chart_reads.py); never blocks a decision
 
     @classmethod
@@ -79,6 +80,7 @@ class TradeDecision:
             evidence=list(evidence),
             position_ticket=int(inp["position_ticket"]) if inp.get("position_ticket") else None,
             stop_timeframe=stop_timeframe,
+            playbook=str(inp.get("playbook") or "").strip().lower(),
             chart_read=clean_read(inp.get("chart_read")),
         )
 
@@ -150,6 +152,14 @@ SUBMIT_TRADE_TOOL: dict = {
                 "description": (
                     "Short label for the trade setup: trend_continuation, breakout, reversal, "
                     "range_bounce, scalp, news_play, take_profit, stop_loss_hit, wait."
+                ),
+            },
+            "playbook": {
+                "type": "string",
+                "description": (
+                    "Required for 'open' when the survivors gate is on: the approved playbook name "
+                    "(e.g. alpha) that cleared the pre-registered gate for this asset class. "
+                    "Empty or unknown playbooks are hard-blocked. Use action=wait if none apply."
                 ),
             },
             "evidence": {
