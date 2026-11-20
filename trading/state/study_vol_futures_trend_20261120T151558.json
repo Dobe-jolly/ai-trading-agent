@@ -1,0 +1,108 @@
+{
+ "data_source": "yahoo_continuous_futures",
+ "verdict": "FAIL",
+ "failed": [
+  "t +0.60 is below 3.0",
+  "out-of-sample t +0.26 is below 1.65",
+  "OOS beats always-long by only +0.039 ATR (need 0.05)"
+ ],
+ "notes": [
+  "Vol-targeted 12-1 TSMOM on Yahoo continuous futures proxies.",
+  "Friction 0.05 ATR/trade + weight\u00d7spread/ATR; no FX overnight swap.",
+  "Always-long uses the same vol weights (risk-on drift analogue in the first gate).",
+  "Pooled futures cell \u2014 contracts share macro factors; pooled t overstates independence."
+ ],
+ "symbols": [
+  "ES",
+  "NQ",
+  "ZN",
+  "CL",
+  "GC",
+  "SI",
+  "HG",
+  "6E",
+  "6J",
+  "ZC"
+ ],
+ "per_symbol": {
+  "ES": [
+   213,
+   0.168
+  ],
+  "NQ": [
+   213,
+   0.272
+  ],
+  "ZN": [
+   212,
+   0.005
+  ],
+  "CL": [
+   210,
+   -0.092
+  ],
+  "GC": [
+   213,
+   0.229
+  ],
+  "SI": [
+   213,
+   0.008
+  ],
+  "HG": [
+   213,
+   -0.082
+  ],
+  "6E": [
+   213,
+   -0.346
+  ],
+  "6J": [
+   213,
+   0.415
+  ],
+  "ZC": [
+   213,
+   -0.152
+  ]
+ },
+ "real": {
+  "n": 2126,
+  "wins": 1077,
+  "avg_r": 0.04260534829255514,
+  "t": 0.5980255130790478,
+  "total_r": 90.57897046997223,
+  "n_oos": 906,
+  "avg_r_oos": 0.03011590541955708,
+  "t_oos": 0.25840843990140644
+ },
+ "placebo": {
+  "n": 2126,
+  "wins": 1046,
+  "avg_r": -0.0451768303403347,
+  "t": -0.6339842724215635,
+  "total_r": -96.04594130355157,
+  "n_oos": 906,
+  "avg_r_oos": 0.12363970745832,
+  "t_oos": 1.0624159284337342
+ },
+ "always_long": {
+  "n": 2126,
+  "wins": 1116,
+  "avg_r": -0.05736036484865386,
+  "t": -0.8044834564858695,
+  "total_r": -121.94813566823811,
+  "n_oos": 906,
+  "avg_r_oos": -0.009354954306307693,
+  "t_oos": -0.0802269570874197
+ },
+ "params": {
+  "lookback": 252,
+  "skip": 21,
+  "hold": 21,
+  "vol_window": 63,
+  "target_vol": 0.1,
+  "max_weight": 2.0,
+  "futures_friction_atr": 0.05
+ }
+}

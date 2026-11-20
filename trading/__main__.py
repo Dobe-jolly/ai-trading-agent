@@ -14,6 +14,7 @@ Usage:
   python -m trading study-metals-trend           # Study C: metals long-biased D1 trend sleeve (PLAYBOOKS.md)
   python -m trading study-carry                  # Study C: FX carry sleeve (PLAYBOOKS.md)
   python -m trading study-eqrisk                 # Study D: equity→FX risk-on/off (rules in PLAYBOOKS.md)
+  python -m trading study-vol-futures-trend      # Study D: vol-targeted futures trend (PLAYBOOKS.md)
   python -m trading score-reads                  # score the model's chart reads against later price, then report
   python -m trading playbooks [NAME]             # list playbooks, or replay one on history and judge it
   python -m trading backtest --from 2026-05-01   # backtest from May to today
@@ -484,6 +485,30 @@ def cmd_study_eqrisk(args) -> int:
     print(f"\nFull results: {path}")
     return 0
 
+
+def cmd_study_vol_futures_trend(args) -> int:
+    """Study D: vol-targeted futures trend (rules fixed in PLAYBOOKS.md before any result)."""
+    from trading.vol_futures_trend import load_candles, run
+
+    try:
+        candles, spreads, source = load_candles(years=args.years)
+    except Exception as exc:  # noqa: BLE001
+        log.error("Could not load D1 futures history: %s", exc)
+        return 1
+    if not candles:
+        log.error("No futures D1 history loaded.")
+        return 1
+    for sym, data in sorted(candles.items()):
+        log.info("%s: %d D1 bars (%s to %s) spread=%.6g",
+                 sym, len(data), data[0].time.date(), data[-1].time.date(), spreads.get(sym, 0.0))
+
+    report = run(candles, spreads, seed=args.seed, data_source=source)
+    print(report.text())
+    out_dir = Path("trading/state")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\nFull results: {report.save(out_dir)}")
+    return 0 if report.verdict == "PASS" else 1
+
 def cmd_study(args) -> int:
     """Test whether regime, sweeps, gaps and breaks predict the next N bars on historical candles."""
     s, errors = _load()
@@ -774,6 +799,10 @@ def main() -> int:
     p_eq.add_argument("--years", type=int, default=20, help="Yahoo D1 history in years (default 20)")
     p_eq.add_argument("--symbols", help="Comma-separated FX pairs (default: Study D five pairs)")
     p_eq.add_argument("--seed", default="0", help="Placebo seed (default 0)")
+    p_svf = sub.add_parser("study-vol-futures-trend",
+                      help="Study D: vol-targeted futures trend (rules fixed in PLAYBOOKS.md)")
+    p_svf.add_argument("--years", type=int, default=20, help="Yahoo continuous futures history in years (default 20)")
+    p_svf.add_argument("--seed", default="0", help="Placebo seed (default 0)")
     p_sr = sub.add_parser("score-reads", help="Score the model's chart reads against later price and report")
     p_sr.add_argument("--bars", type=int, default=2000, help="H1 candles to fetch per symbol (default 2000)")
     p_sr.add_argument("--report-only", action="store_true", help="Do not connect to MT5; report on reads already scored")
@@ -830,6 +859,8 @@ def main() -> int:
         return cmd_study_carry(args)
     if args.cmd == "study-eqrisk":
         return cmd_study_eqrisk(args)
+    if args.cmd == "study-vol-futures-trend":
+        return cmd_study_vol_futures_trend(args)
     if args.cmd == "playbooks":
         return cmd_playbooks(args)
 
