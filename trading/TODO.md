@@ -118,6 +118,12 @@ Lagged S&P 500 21D sign → fixed risk-on FX map (AUD/NZD/USDJPY/USDCHF/EURJPY),
 - [x] One run seed 0: forex cell **FAIL** (n=4146, avg R −0.110, t −5.41; OOS −0.085 t −2.96; placebo −0.106). No retune. Survivors untouched.
 - Results: project store `docs/study-equity-riskon-fx-results.md`.
 
+## Study G10-F: funding / swap carry on slow G10 FX (added 2026-11-20)
+Separate from OECD-policy carry sketches: overnight / money-market funding differentials as a broker-style swap proxy.
+- [x] Rules + public proxy table pre-registered in PLAYBOOKS.md before any run
+- [x] Implemented `trading/carry_funding.py` + `python -m trading study-g10-carry`; machine-checked
+- [x] One run seed 0 under default gate (placebo + OOS, honest spread + synthetic funding): **FAIL** (avg −0.027 ATR, t −0.42). No survivors. Results: store `docs/study-g10-funding-carry-results.md`
+
 ## Phase 5: Playbooks (one module each, each backtested per asset class)
 **Now run in phases, see [PLAYBOOKS.md](PLAYBOOKS.md): rules and gate are fixed before any result exists.**
 - [x] Phase 0: the test machine (`trading/playbooks/`: interface, replay simulator with pessimistic fills and costs, placebo, pre-registered gate, lookahead checker, `python -m trading playbooks`). Proven first: finds a planted edge, rejects a random walk and a reversed rule, and costs can eat an edge (230 trading tests pass)
