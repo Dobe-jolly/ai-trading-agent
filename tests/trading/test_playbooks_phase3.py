@@ -154,20 +154,21 @@ def after_entry(high, close, n=80):
     return Bars(opens, highs, lows, closes, [None] * n, [1.0] * n)
 
 
-def test_a_jump_through_the_stop_fills_at_the_close_only_when_asked():
+def test_a_jump_through_the_stop_fills_at_the_close_by_default():
     bars = after_entry(high=110.0, close=109.0)                  # short from 100, stop at 102
-    plain = simulate("X", bars, ShortAt60()).trades[0]
-    jumped = simulate("X", bars, ShortAt60(), jump_stops=True).trades[0]
+    plain = simulate("X", bars, ShortAt60(), jump_stops=False).trades[0]
+    jumped = simulate("X", bars, ShortAt60()).trades[0]          # default jump_stops=True
     assert plain.r == pytest.approx(-1.0) and plain.reason == "stop"
     assert jumped.r == pytest.approx(-4.5) and jumped.reason == "stop"      # (109 - 100) / 2 ATR of risk
 
 
 def test_touching_the_stop_but_closing_inside_is_still_minus_one_r():
     bars = after_entry(high=102.5, close=100.5)
-    assert simulate("X", bars, ShortAt60(), jump_stops=True).trades[0].r == pytest.approx(-1.0)
+    assert simulate("X", bars, ShortAt60()).trades[0].r == pytest.approx(-1.0)
 
 
 def test_jump_stops_never_help_a_trade():
     for high, close in ((110, 109), (102.5, 100.5), (103, 102.5)):
         bars = after_entry(high, close)
-        assert simulate("X", bars, ShortAt60(), jump_stops=True).trades[0].r <= simulate("X", bars, ShortAt60()).trades[0].r
+        assert (simulate("X", bars, ShortAt60(), jump_stops=True).trades[0].r
+                <= simulate("X", bars, ShortAt60(), jump_stops=False).trades[0].r)

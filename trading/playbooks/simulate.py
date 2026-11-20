@@ -7,8 +7,9 @@ Conventions, all chosen to be pessimistic where the candle data can't tell:
   - If a bar opens beyond the stop, the fill is at that open (a gap), which is worse than the stop.
   - One full spread is charged per trade, expressed in R (spread / stop distance).
   - R is measured against the initial stop distance: a stop-out is about -1R before costs.
-  - Optional `jump_stops` (off by default): a bar that touches the stop and closes beyond it fills at the close,
+  - Jump-stops (on by default): a bar that touches the stop and closes beyond it fills at the close,
     for markets where price jumps (Boom/Crash spikes) instead of passing through every price.
+    Pass jump_stops=False only for diagnostics that compare against the old optimistic fill.
 """
 from __future__ import annotations
 
@@ -19,6 +20,20 @@ from typing import Optional
 from .base import Bars, Playbook, Signal
 
 OOS_FRACTION = 0.4        # the last 40% of each history is the out-of-sample half
+
+
+def drift_direction(symbol: str) -> Optional[int]:
+    """Known structural drift from the symbol name, or None.
+
+    Boom drifts down between up-spikes → sell with the drift. Crash drifts up between
+    down-spikes → buy with the drift. Used by DriftPlacebo so a rule that only rides the
+    drift cannot PASS the gate (Delta lesson).
+    """
+    if symbol.startswith("Boom"):
+        return -1
+    if symbol.startswith("Crash"):
+        return 1
+    return None
 
 
 @dataclass(frozen=True)
@@ -39,7 +54,8 @@ class SimResult:
     free_bars: int            # bars on which a signal could have been taken (flat and warmed up)
 
 
-def simulate(symbol: str, bars: Bars, playbook: Playbook, spread: float = 0.0, jump_stops: bool = False) -> SimResult:
+def simulate(symbol: str, bars: Bars, playbook: Playbook, spread: float = 0.0,
+             jump_stops: bool = True) -> SimResult:
     n = len(bars)
     split = int(n * (1 - OOS_FRACTION))
     trades: list[Trade] = []
@@ -60,7 +76,7 @@ def simulate(symbol: str, bars: Bars, playbook: Playbook, spread: float = 0.0, j
 
 
 def _trade(symbol: str, bars: Bars, pb: Playbook, sig: Signal, t: int, a: float,
-           spread: float, split: int, jump_stops: bool = False) -> Trade:
+           spread: float, split: int, jump_stops: bool = True) -> Trade:
     d = sig.direction
     entry_i = t + 1
     entry = bars.opens[entry_i]
@@ -125,3 +141,29 @@ class Placebo(Playbook):
         if self._rng.random() >= self._rate:
             return None
         return Signal(self._rng.choice((-1, 1)), "placebo")
+
+
+class DriftPlacebo(Playbook):
+    """Same entry rate / geometry as Placebo, but always in the symbol's known drift direction.
+
+    On Boom/Crash the random-direction placebo cancels the drift, so a rule that only trades with
+    the drift can look like skill. This placebo makes that fail the gate unless the rule beats
+    trading blindly with the drift by MIN_EDGE_OVER_PLACEBO (full sample and out of sample).
+    """
+
+    name = "drift_placebo"
+
+    def __init__(self, like: Playbook, rate: float, seed: str, direction: int) -> None:
+        if direction not in (-1, 1):
+            raise ValueError(f"drift direction must be +1 or -1, got {direction!r}")
+        self.asset_classes = like.asset_classes
+        self.warmup, self.stop_atr, self.target_atr, self.max_bars = (
+            like.warmup, like.stop_atr, like.target_atr, like.max_bars)
+        self._rate = rate
+        self._rng = random.Random(seed)
+        self._direction = direction
+
+    def scan(self, bars: Bars, t: int) -> Optional[Signal]:
+        if self._rng.random() >= self._rate:
+            return None
+        return Signal(self._direction, "drift_placebo")
