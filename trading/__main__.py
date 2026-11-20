@@ -50,8 +50,11 @@ def cmd_check(args) -> int:
     print(f"Settings OK")
     print(f"  mode={s.mode}  model={s.model}")
     print(f"  symbols={', '.join(s.symbols)}")
+    from trading.survivors import summarize_approved
     print(f"  max_positions={s.max_positions}  new_opens_per_scan={s.max_new_opens_per_scan}  "
           f"same_direction={s.max_same_direction or 'off'}  max_risk={s.max_risk_pct}%  min_stop={s.min_stop_atr:g}xATR")
+    print(f"  require_approved_setup={'on' if s.require_approved_setup else 'off'}  "
+          f"approved={summarize_approved()}")
     print(f"  daily_loss_limit={s.daily_loss_limit_pct}%  max_total_risk={s.max_total_risk_pct}%  spread_max={s.spread_max_pips} pips")
     if args.ping:
         from trading.broker.metatrader import MT5Broker, MT5Error

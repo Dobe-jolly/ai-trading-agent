@@ -9,6 +9,11 @@ Every playbook is validated in `backtest.py` before it is enabled live.
 - [ ] Economic-calendar data source for the news blackout (nothing in the repo yet)
 - [ ] Keep the 60% daily loss limit (pastes say 3%; 3% would lock the bot after one normal stop-out)
 
+## Fix 1 (2026-11-20): halt free-form opens
+- [x] Hard-block paper/live `action=open` unless `playbook` is on `trading/survivors.py` APPROVED for that asset class (`TRADING_REQUIRE_APPROVED_SETUP`, default on). CLOSE/MODIFY still allowed. Research CLIs unchanged.
+- [x] System prompt aligned with known nulls (Alpha–Epsilon, Study A/B, structure/sweep/FVG, synthetics); opens only via approved playbook.
+- [ ] Re-enable path: after a cell PASSes placebo+OOS (+ diagnostics), append `ApprovedSetup` in `survivors.py` and ship — do not flip the env flag off to resume discretion.
+
 ## Phase 1: Safety and guardrails (`guardrails.py`, `prompts/system_prompt.md`)
 - [x] 1. Global open-risk cap across all positions (`TRADING_MAX_TOTAL_RISK_PCT`, default 40)
 - [x] 1c. Symbol order shuffled every scan (found in the first demo scan: the 3-opens-per-scan cap went to whichever symbols came first, so forex filled the slots and 5 approved synthetics were blocked at the same confidence). The order used is stored in `trade_runs.symbols`

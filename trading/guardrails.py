@@ -7,7 +7,9 @@ Rule hierarchy (checked in order):
   1. Daily loss circuit breaker — stops all trading when the day's loss exceeds the limit
   2. Max open positions — prevents over-exposure
   3. Action-specific rules for OPEN:
-     0. One open position per symbol
+     0. Approved-setup survivors gate (Fix 1) — blocks free-form opens when no playbook
+        cleared placebo+OOS, or when playbook is missing / not approved for the asset class
+     1. One open position per symbol
      a. Spread too wide
      b. SL or TP missing / zero, or the stop closer than min_stop_atr x the ATR of the
         timeframe it is anchored to (which must be one the model analysed)
@@ -27,6 +29,7 @@ from typing import Callable, Optional
 from .broker.metatrader import MIN_LOT_RISK_TOLERANCE, AccountState, Position, SymbolInfo
 from .decision import CLOSE, MODIFY, OPEN, WAIT, TradeDecision
 from .indicators import atr
+from .survivors import open_allowed
 
 MIN_RR_RATIO = 1.0          # minimum risk:reward (TP/SL pips)
 MIN_SL_PIPS = 3             # smallest acceptable stop-loss (global)
@@ -128,6 +131,7 @@ def apply_guardrails(
     atr_price: Optional[float] = None,
     min_stop_atr: float = 0.0,
     analysed_timeframes: Optional[frozenset] = None,
+    require_approved_setup: bool = False,
 ) -> GuardrailResult:
     notes: list[str] = []
 
@@ -167,6 +171,14 @@ def apply_guardrails(
         return GuardrailResult(decision, decision, notes)
 
     # ---- OPEN-specific checks ---------------------------------------------------
+
+    # 0. Survivors gate (Fix 1) — free-form opens are hard-blocked until a registered
+    #    playbook clears placebo+OOS and is listed in trading/survivors.py. CLOSE/MODIFY
+    #    are unaffected so open risk can still be managed. Research CLIs never call this.
+    if require_approved_setup:
+        ok, reason = open_allowed(decision.playbook, decision.symbol)
+        if not ok:
+            return _block(decision, notes, reason)
 
     # 1b. Circuit breaker (blackout hours, broker latency) — new opens only
     if halted:

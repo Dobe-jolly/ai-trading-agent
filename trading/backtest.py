@@ -765,6 +765,7 @@ class BacktestEngine:
                                if result.decision.action == OPEN else None),
                     min_stop_atr=self.s.min_stop_atr,
                     analysed_timeframes=frozenset(result.evidence.timeframes_used),
+                    require_approved_setup=self.s.require_approved_setup,
                 )
                 proposals_ts.append((symbol, result, guard, symbol_info))
 

@@ -12,6 +12,7 @@ from .config import Settings
 
 
 def tokens(s: Settings) -> dict[str, str]:
+    from .survivors import summarize_approved
     return {
         "MAX_POSITIONS": str(s.max_positions),
         "MAX_NEW_OPENS": str(s.max_new_opens_per_scan),
@@ -22,6 +23,8 @@ def tokens(s: Settings) -> dict[str, str]:
         "MAX_TOTAL_RISK_PCT": f"{s.max_total_risk_pct:g}",
         "DAILY_LOSS_LIMIT_PCT": f"{s.daily_loss_limit_pct:g}",
         "LOCKOUT_HOURS": f"{s.lockout_hours:g}",
+        "APPROVED_SETUPS": summarize_approved(),
+        "REQUIRE_APPROVED_SETUP": "on" if s.require_approved_setup else "off",
     }
 
 
