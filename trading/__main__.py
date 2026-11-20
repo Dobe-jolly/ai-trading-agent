@@ -17,6 +17,7 @@ Usage:
   python -m trading study-vol-futures-trend      # Study D: vol-targeted futures trend (PLAYBOOKS.md)
   python -m trading score-reads                  # score the model's chart reads against later price, then report
   python -m trading playbooks [NAME]             # list playbooks, or replay one on history and judge it
+  python -m trading study-g10-carry --seed 0     # Study G10-F: funding/swap carry on G10 FX
   python -m trading backtest --from 2026-05-01   # backtest from May to today
   python -m trading backtest --list              # list past backtest runs
 """
@@ -618,6 +619,38 @@ def cmd_playbooks(args) -> int:
     return 0
 
 
+def cmd_study_g10_carry(args) -> int:
+    """Study G10-F: funding/swap carry on G10 FX under the registered public MM proxy."""
+    from trading.carry_funding import build_rate_panel, load_yahoo_basket, run
+
+    s, errors = _load()
+    # State path is enough; MT5 credentials are not required for the Yahoo path.
+    out_dir = s.state_db.parent if not errors else Path(__file__).resolve().parent / "state"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    log.info("Building public overnight/MM funding panel (registered proxy)…")
+    panel, labels = build_rate_panel()
+    for ccy, series in panel.items():
+        log.info("  %s: %d months (%s)", ccy, len(series), labels.get(ccy, "?"))
+
+    log.info("Loading Yahoo D1 basket (%d years)…", args.years)
+    candles, spreads, source = load_yahoo_basket(years=args.years)
+    if not candles:
+        log.error("No Yahoo FX history loaded.")
+        return 1
+    for sym, data in candles.items():
+        log.info("%s: %d bars (%s to %s)", sym, len(data), data[0].time.date(), data[-1].time.date())
+
+    report = run(
+        candles, panel, spreads, seed=args.seed,
+        data_source=source, funding_source="public_mm_proxy", series_used=labels,
+    )
+    print(report.text())
+    path = report.save(out_dir)
+    print(f"\nFull results: {path}")
+    return 0
+
+
 def cmd_score_reads(args) -> int:
     """Score chart reads old enough to have a future, with later H1 candles; then print the report."""
     s, errors = _load()
@@ -814,6 +847,13 @@ def main() -> int:
                        help="Also print the R-multiple result for one group of asset classes")
     p_out.add_argument("--since", metavar="YYYY-MM-DD", help="With --cohort: only trades opened on/after this date")
 
+    p_g10 = sub.add_parser(
+        "study-g10-carry",
+        help="Study G10-F: funding/swap carry on a slow G10 FX basket (Yahoo + public MM proxy)",
+    )
+    p_g10.add_argument("--seed", default="0", help="Placebo seed (default 0)")
+    p_g10.add_argument("--years", type=int, default=20, help="Yahoo D1 history in years (default 20)")
+
     p_bt = sub.add_parser("backtest", help="Historical backtest using MT5 data")
     p_bt.add_argument("--from",   dest="date_from", metavar="YYYY-MM-DD",
                       help="Start date (default: May 1 of current year)")
@@ -861,6 +901,8 @@ def main() -> int:
         return cmd_study_eqrisk(args)
     if args.cmd == "study-vol-futures-trend":
         return cmd_study_vol_futures_trend(args)
+    if args.cmd == "study-g10-carry":
+        return cmd_study_g10_carry(args)
     if args.cmd == "playbooks":
         return cmd_playbooks(args)
 

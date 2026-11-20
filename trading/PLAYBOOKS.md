@@ -724,6 +724,90 @@ Artifact: `trading/state/study_vol_futures_trend_20261120T151558.json`.
 **Shelved as written. No retune. Survivors allowlist unchanged.**
 
 
+## Study G10-F: funding / swap carry on a slow G10 FX basket. Rules written 2026-11-20, before any result
+
+Separate from Study B (TSMOM on past returns). This sleeve asks whether **broker-style funding differentials**
+(overnight / money-market rates converted to synthetic daily swap) produce positive net R on a G10 basket after
+spread, with the same honesty bars as the default research gate (placebo + OOS). It is a slow sleeve, not part of
+the intraday agent. One run, seed 0, no tuning after seeing results.
+
+### Why not the stop/target playbook machine
+Carry is a multi-week hold funded by overnight interest, not a stop/target scalp. Jump-stops do not apply (no stop).
+The realism analogues are: **one spread + synthetic daily funding**, a **random-direction placebo**, OOS last 40%,
+and — if a PASS — **always-long** and **anti-carry** diagnostics so collecting interest alone is not mistaken for
+skill beyond a reversed rule.
+
+### Basket (fixed)
+G10 spot pairs, Yahoo D1 when MT5 is unavailable (same pattern as other offline studies):
+`EURUSD, GBPUSD, USDJPY, USDCHF, AUDUSD, NZDUSD, USDCAD, EURJPY, GBPJPY, EURGBP, AUDJPY, CADJPY`.
+One cell: asset class `forex`. (No metals, no synthetics in this study.)
+
+### Funding source (registered before the run)
+1. **Prefer live broker swaps** when MT5 is connected: `swap_long` / `swap_short` from symbol info, converted to
+   price units per day using the broker’s swap mode. (Not available in this cloud runner.)
+2. **Registered public proxy when MT5 swaps are unavailable** — overnight / money-market funding, **not** a pure
+   OECD policy-rate shortcut where a better series exists:
+
+| CCY | Primary series (overnight / MM) | Fallback for earlier history |
+|---|---|---|
+| USD | NY Fed SOFR (daily; month-average for the signal) | BIS monthly US central-bank policy rate before 2018-04 |
+| EUR | SNB cube `ESTR` | SNB cube `EURIBOR` (3M) before 2019-10 |
+| JPY | SNB cube `TONA` | — |
+| GBP | SNB cube `SONIA` | — |
+| CHF | SNB cube `SARON` | — |
+| CAD | Bank of Canada V39079 overnight target (daily→month avg) | — |
+| AUD | RBA F1.1 Interbank Overnight Cash Rate | — |
+| NZD | BIS monthly NZ policy OCR | (no public overnight series reachable in this runner; stated now) |
+
+Sources are fetched at run time and cached under `trading/data/funding/` (gitignored raw dumps). The report records
+which series fed each currency-month.
+
+**Synthetic long swap (price units per calendar day), registered formula:**  
+`swap_long_day = spot × (r_base − r_quote) / 100 / 365` with `r` in percent per annum.  
+`swap_short_day = −swap_long_day`.  
+No broker markup is added (optimistic vs live Deriv/MT5). A PASS under this proxy is still not a live go without
+re-checking real swap schedules.
+
+### Signal and trade
+- **Timeframe:** D1. Rebalance only when flat.
+- **Rate lag:** at bar t, use each currency’s last month-average rate whose month-end date is **strictly before**
+  the calendar month of bar t (no same-month peek).
+- **Carry score** for BASE/QUOTE = `r_base − r_quote` (percentage points).
+- **Deadband:** if `|score| < 0.25`, no trade that bar (noise differentials).
+- **Direction:** buy if score > +0.25, sell if score < −0.25.
+- **Entry** open of t+1; **exit** close of t+HOLD with HOLD = 21; non-overlapping.
+- **Net R** (ATR at signal bar):  
+  `direction × (exit − entry) / ATR + funding_R − spread / ATR`,  
+  where `funding_R = direction × Σ_{days in hold} swap_long_day(spot_d, r_base, r_quote) / ATR`  
+  using the lagged rates fixed at the signal (rates do not update mid-trade in this first study).
+- Wilder ATR(14). Spreads: Yahoo path uses `backtest._SPREAD_PIPS` × point; MT5 path uses live bid/ask.
+
+### Placebo, diagnostics, gate
+- **Placebo:** random direction at the same entry bars / hold / costs (seed 0).
+- **Gate (one forex cell), all at once** — same numbers as the playbook / Study B gate, in ATR units:  
+  ≥100 trades; avg net R > 0; t ≥ 3; OOS ≥40 trades, avg > 0, t ≥ 1.65; beat random placebo by ≥ 0.05 ATR.
+- **If PASS, before accepting as a candidate (cannot rescue a FAIL):**  
+  1. Beat **always-long** by ≥ 0.05 ATR full and OOS.  
+  2. Beat **anti-carry** (reversed deadband signal) by ≥ 0.05 ATR full and OOS.  
+  Otherwise shelve as “funding collection / drift, not a selectable edge.”
+- **Sample caveat:** G10 pairs share dollar and rate factors; pooled t overstates independence. Report per-symbol
+  averages.
+
+### Procedure
+- One run: `python -m trading study-g10-carry --seed 0`. CLI loads Yahoo D1 + public funding panel (or MT5 if configured).
+- Honest expectation: classic carry often shows up in total return including funding; after spread and the anti-carry /
+  always-long bars it frequently fails as a *selectable* edge. The aim is to close the question under this proxy.
+
+### Machine check
+Unit tests: planted positive carry with adverse price still can PASS net-R vs random when funding dominates; random
+rates / random walk FAIL; anti-carry is the mirror of the rule.
+
+### Result (run 2026-11-20, seed 0) — FAIL, no candidates
+Yahoo D1 + registered public MM proxy. Forex cell: n=2149, avg **−0.027** ATR, t **−0.42**, OOS avg +0.161 (t 1.72),
+placebo avg −0.118. Failed avg>0 and t≥3. Always-long / anti-carry not engaged. Shelved; survivors untouched.
+Details: store `docs/study-g10-funding-carry-results.md`; artifact `trading/state/study_g10_carry_20261120T153824.json`.
+
+
 ## Outline of later phases (to be written out fully, and approved, before they are built)
 
 - **Delta, Epsilon:** now written out in Phase 3 above.
@@ -735,3 +819,4 @@ Artifact: `trading/state/study_vol_futures_trend_20261120T151558.json`.
 - **Study C (FX carry):** rules above; implementation in `trading/carry.py`.
 - **Study D (equity→FX risk-on/off):** rules above; implementation in `trading/eqrisk.py`.
 - **Study D (vol futures trend):** rules above; implementation in `trading/vol_futures_trend.py`.
+- **Study G10-F:** rules above; implementation in `trading/carry_funding.py`. **Run once 2026-11-20: FAIL (no candidates).**
