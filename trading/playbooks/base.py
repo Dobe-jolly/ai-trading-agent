@@ -72,6 +72,7 @@ class Playbook:
     """
     name: str = ""
     asset_classes: tuple[str, ...] = ()      # values of study.asset_class this rule is meant for
+    symbols: tuple[str, ...] = ()            # empty = every symbol in those classes
     timeframe: str = "H1"
     warmup: int = 60                         # bars needed before the rule can speak
     stop_atr: float = 1.5

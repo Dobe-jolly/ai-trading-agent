@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from .broker.metatrader import MT5Broker
+from .fvg_align import TIMEFRAMES as ALIGN_TIMEFRAMES
+from .fvg_align import as_payload, read_broker_candles
 from .geometry import analyze_candles
 from .indicators import atr as _atr
 
@@ -61,6 +63,7 @@ class TradingToolbox:
         return [
             _SCHEMA_GET_CANDLES,
             _SCHEMA_GET_STRUCTURE,
+            _SCHEMA_GET_ALIGNED_FVGS,
             _SCHEMA_RUN_ANALYSIS,
             _SCHEMA_GET_ACCOUNT_STATE,
             _SCHEMA_GET_OPEN_POSITIONS,
@@ -82,6 +85,8 @@ class TradingToolbox:
                 return self._get_candles(args, evidence)
             if name == "get_structure":
                 return self._get_structure(args, evidence)
+            if name == "get_aligned_fvgs":
+                return self._get_aligned_fvgs(args, evidence)
             if name == "run_analysis":
                 return self._run_analysis(args, evidence)
             if name == "get_account_state":
@@ -158,6 +163,38 @@ class TradingToolbox:
         if "error" in result:
             return f"{symbol} {timeframe}: {result['error']}", True
         return json.dumps({"symbol": symbol, "timeframe": timeframe, "swing_n": swing_n, **result}, indent=2), False
+
+    def _get_aligned_fvgs(self, args: dict, evidence: TradeEvidence) -> tuple[str, bool]:
+        """Gaps on D1, H4, H1 and M15 that overlap on two or more of those timeframes.
+
+        The daily trend decides which side is a retrace target: bullish gaps in an uptrend,
+        bearish gaps in a downtrend. A continuation flag means the latest 15-minute bar is
+        the first close back with the trend after price traded into one of those zones.
+        """
+        symbol = str(args.get("symbol", ""))
+        if not symbol:
+            return "Symbol is required.", True
+
+        fetched: dict[str, list] = {}
+        missing: list[str] = []
+        for timeframe, count in (("D1", 120), ("H4", 200), ("H1", 240), ("M15", 200)):
+            candles = self._broker.get_candles(symbol, timeframe, count)
+            evidence.timeframes_used.append(timeframe)
+            if not candles:
+                missing.append(timeframe)
+                continue
+            evidence.candle_bars[f"{symbol}_{timeframe}"] = len(candles)
+            fetched[timeframe] = candles
+        evidence.symbols_checked.append(symbol)
+        if missing:
+            return (
+                f"No candle data for {symbol} on {', '.join(missing)}. "
+                f"Aligned gaps need all of {', '.join(ALIGN_TIMEFRAMES)}."
+            ), True
+
+        payload = as_payload(read_broker_candles(fetched))
+        payload["symbol"] = symbol
+        return json.dumps(payload, indent=2), False
 
     def _run_analysis(self, args: dict, evidence: TradeEvidence) -> tuple[str, bool]:
         """Execute custom Python analysis code on raw candle data."""
@@ -388,6 +425,29 @@ _SCHEMA_GET_STRUCTURE: dict = {
             },
         },
         "required": ["symbol", "timeframe"],
+    },
+}
+
+_SCHEMA_GET_ALIGNED_FVGS: dict = {
+    "name": "get_aligned_fvgs",
+    "description": (
+        "Mark unfilled fair value gaps from the daily "
+        "chart down to 15 minutes. Returns only the unfilled gaps that overlap on two or more "
+        "of D1, H4, H1 and M15, in the direction of the daily trend. In an uptrend those are "
+        "the bullish gaps a retrace is expected to cover before buying again; in a downtrend, "
+        "the bearish gaps, then a sell. `continuation` is buy or sell when the latest 15-minute "
+        "bar is that first close back with the trend, otherwise null. This is a chart fact for "
+        "playbook Kappa. It is not an approved open."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "symbol": {
+                "type": "string",
+                "description": "Symbol name exactly as in MT5. The registered test is Volatility 100 (1s) Index.",
+            },
+        },
+        "required": ["symbol"],
     },
 }
 

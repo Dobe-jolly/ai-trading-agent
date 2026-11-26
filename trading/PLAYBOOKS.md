@@ -874,9 +874,66 @@ Command: `python -m trading study-xsmom --seed 0`. Yahoo D1 G10 USD pairs.
 Failed: avg/OOS avg not > 0; t bars missed; did not beat placebo by ≥0.05 R. Risk-on basket diagnostic not run (no PASS). **CANDIDATES: none.** Shelved; no retune; survivors unchanged. Details: project store `docs/study-next-family-results.md`.
 
 
+## Kappa: aligned fair value gap, then trend continuation
+
+Written 2026-11-26 from a direct observation of Volatility 100 (1s), before any replay. The earlier signal
+study found no edge in a single-timeframe fair value gap. This is a different rule, so that null does not
+answer it, and it does not get a pass for being different either. One cell. No parameter changes after the
+result is seen.
+
+### The observation, as the rule
+
+On **Volatility 100 (1s) Index**, when the daily structure is an uptrend, price retraces to cover bullish
+fair value gaps. The gaps it covers are mostly the ones that sit on top of each other on two or more
+timeframes from the daily chart down to 15 minutes (D1, H4, H1, M15). After that cover, it buys again.
+A downtrend is the mirror: price retraces up into bearish gaps that line up, then sells again.
+
+### Definitions (the repo's own, plus the confluence rule)
+
+- **Timeframe of the trade:** M15. Higher timeframes are built from those M15 bars when the replay runs,
+  so a higher-timeframe candle exists only once every 15-minute bar inside it is present and the next
+  candle has started. The candle still forming is not used. Broker candle times are read as UTC, which
+  is what Deriv's servers use. A day is 96 M15 bars because this index trades all week.
+- **Daily trend:** `geometry.classify_regime` on the last 40 closed D1 candles, swings of 3 bars each
+  side, tolerance 0.10 ATR. Anything other than BULLISH_TREND or BEARISH_TREND is no trade.
+- **Gap:** the existing three-candle fair value gap (`geometry.find_gaps`), at least 0.20 of that
+  timeframe's own ATR, not yet filled. A gap whose third candle is the latest candle on that series
+  is ignored.
+- **Aligned zone:** one gap from each of at least two of D1, H4, H1, M15, all the same direction as the
+  daily trend, with a shared price band wider than a single price. The zone is that shared band. If a
+  two-timeframe band contains a three-or-four-timeframe band, only the larger confluence is kept.
+  At most 8 unfilled gaps per timeframe, the ones closest to the current M15 close, are considered.
+- **Retrace and continuation.** Buy: within the last 4 M15 bars (the cover bar plus three more), some bar
+  closed the previous bar above the zone and traded into it; no close since that bar has gone through the
+  bottom of the zone; and the current bar is the first close up in that stretch. Sell: the mirror, through
+  the top of a bearish zone. One position at a time, entry at the next M15 open, as in every other playbook.
+- **Trade geometry:** stop 1.5 ATR, target 3.0 ATR, time limit 32 M15 bars (eight hours). Same 2R shape as
+  Alpha, on the timeframe this rule actually trades. Not chosen by looking at results.
+- **Where it is allowed to trade:** `Volatility 100 (1s) Index` only. Other Volatility indices are not this
+  observation. The cell is `vol_index`, scored on that one symbol.
+
+### Gate and expectation
+
+The same gate as Phase 0: at least 100 trades, average R above 0, t at least 3; out of sample at least 40
+trades, average R above 0, t at least 1.65; at least 0.05 R better than the random-direction placebo.
+Jump-stops stay on. There is no Boom/Crash drift on this symbol, so the drift placebo does not apply.
+
+Command, when it is run, and not before this section stays as written: `python -m trading playbooks kappa`.
+Default history length is 20,000 M15 bars. One run, seed 0.
+
+Honest expectation: this index is a random process with constant volatility, and a single-timeframe gap
+already failed a broader test. The base case is FAIL. A PASS would be a surprise and would still need a
+second run on earlier history, written down before that run, before anything is added to `survivors.py`.
+Until then the agent marks the zones with `get_aligned_fvgs` and waits.
+
+### Result
+
+Not run. No numbers in this section until that one replay.
+
 ## Outline of later phases (to be written out fully, and approved, before they are built)
 
 - **Delta, Epsilon:** now written out in Phase 3 above.
+- **Kappa:** rules above; implementation in `trading/fvg_align.py` and `trading/playbooks/kappa.py`. Not replayed.
 - **Dropped for now:** Zeta (sweep reversal) and Eta (gap fill): the signal study found no edge. They can be re-tested through
   this machine as ordinary playbooks if you want the question closed with stops and targets included, which the earlier
   fixed-horizon study did not have.
