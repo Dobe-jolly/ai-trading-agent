@@ -590,8 +590,11 @@ def cmd_playbooks(args) -> int:
         if not REGISTRY:
             print("No playbooks registered yet.")
         for name, cls in sorted(REGISTRY.items()):
+            only = ", ".join(cls.symbols)
+            extra = f"  only: {only}" if only else ""
             print(f"  {name:<24} {cls.timeframe}  for: {', '.join(cls.asset_classes)}  "
-                  f"(stop {cls.stop_atr:g} ATR, target {cls.target_atr:g} ATR, {cls.max_bars} bars max)")
+                  f"(stop {cls.stop_atr:g} ATR, target {cls.target_atr:g} ATR, {cls.max_bars} bars max)"
+                  f"{extra}")
         return 0
     if args.playbook not in REGISTRY:
         log.error("Unknown playbook %r. Registered: %s", args.playbook, ", ".join(sorted(REGISTRY)) or "none")
@@ -611,8 +614,14 @@ def cmd_playbooks(args) -> int:
     timeframe = args.timeframe or playbook.timeframe
     wanted = [x.strip() for x in args.symbols.split(",") if x.strip()] if args.symbols else list(s.symbols)
     symbols = [x for x in wanted if asset_class(x) in playbook.asset_classes]
+    if playbook.symbols:
+        symbols = [x for x in symbols if x in playbook.symbols]
     if not symbols:
-        log.error("None of the symbols is in this playbook's asset classes (%s).", ", ".join(playbook.asset_classes))
+        only = f" Registered symbols: {', '.join(playbook.symbols)}." if playbook.symbols else ""
+        log.error(
+            "None of the symbols is in this playbook's markets (%s).%s",
+            ", ".join(playbook.asset_classes), only,
+        )
         return 1
 
     broker = MT5Broker()

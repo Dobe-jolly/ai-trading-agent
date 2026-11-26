@@ -199,9 +199,12 @@ def run_playbook(
     drift_by_class: dict[str, list[Trade]] = {}
     symbols_by_class: dict[str, list[str]] = {}
     per_symbol: dict[str, dict[str, tuple[int, float]]] = {}
+    allowed = playbook.symbols
     for symbol, candles in candles_by_symbol.items():
         group = asset_class(symbol)
         if group not in playbook.asset_classes:
+            continue
+        if allowed and symbol not in allowed:
             continue
         bars = Bars.from_candles(candles)
         spread = spreads.get(symbol, 0.0)

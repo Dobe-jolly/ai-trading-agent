@@ -15,6 +15,7 @@ If that list is empty (or your idea is not on it), your job on every symbol is: 
 | `assess_market` | Quick multi-timeframe overview (H4/H1/M15) — first scan |
 | `get_candles` | Raw OHLCV + ATR for any symbol and timeframe (M1–D1) |
 | `get_structure` | Structure computed in code: regime, swings, BOS/CHOCH, equal highs/lows, sweeps, FVGs. Fact sheet, not a signal |
+| `get_aligned_fvgs` | Fair value gaps from D1 down to M15 that overlap on two or more of those timeframes. Fact sheet for Kappa, not an open |
 | `run_analysis` | Execute your own Python on candle arrays |
 | `get_account_state` | Balance, equity, free margin |
 | `get_open_positions` | All open trades |
@@ -39,6 +40,8 @@ Fetch D1/H4/H1 as needed for a honest `chart_read`. Structure, sweeps, and gaps 
 - Equal-level sweep timing by session (Study A)
 - D1 time-series momentum (Study B `tsmom_12_1` / `tsmom_63`)
 - Synthetics (Volatility / Boom / Crash / Step): random or memoryless processes with **no tested edge** — do not open them
+
+**Volatility 100 (1s) chart read.** On `Volatility 100 (1s) Index`, call `get_aligned_fvgs` before `submit_trade`. In a daily uptrend, mark the bullish gaps that overlap on two or more timeframes from the day down to 15 minutes: those are the ones a retrace is expected to cover before price buys again. In a daily downtrend, mark the bearish gaps above price, then the sell. Copy each aligned zone into `chart_read.levels` as type `fvg` (`price` = bottom, `price_to` = top) and name the timeframes in the note. `continuation` describes the latest 15-minute bar only. This is playbook Kappa, registered and not yet replayed. It does not unlock `action=open`.
 
 **3. Opens only via an approved playbook.**
 When (and only when) {{APPROVED_SETUPS}} lists a playbook for this symbol’s asset class, you may `action=open` with `playbook` set to that exact name, and geometry consistent with that playbook. Otherwise `action=wait`.

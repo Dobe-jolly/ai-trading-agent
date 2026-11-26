@@ -150,6 +150,7 @@ Menkhoff-style winners-minus-losers on G10 vs USD — not time-series TSMOM.
 - [ ] 16. Epsilon: step channel (Step indices)
 - [ ] 17. Zeta: liquidity sweep reversal. **On hold: the signal study found no edge** (forex sweep:bullish +0.035 ATR, t 0.75; sweep:bearish -0.001, t -0.01)
 - [ ] 18. Eta: FVG fill. **On hold: the signal study found no edge** (forex fvg:bullish -0.054 ATR, t -1.13)
+- [ ] 18b. Kappa: Volatility 100 (1s) retrace into an FVG aligned on 2+ of D1/H4/H1/M15, then continuation with the daily trend. Rule fixed in PLAYBOOKS.md and `trading/fvg_align.py` / `playbooks/kappa.py`. Not replayed. Not a survivor. The single-timeframe FVG study does not cover this rule. `get_aligned_fvgs` marks the zones for chart reads only.
 - [ ] 19. Registry and routing
   - [ ] Tier 1: Python pre-filters playbooks by asset class
   - [ ] Tier 2: Claude chooses among the remaining playbooks
